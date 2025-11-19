@@ -1,0 +1,13 @@
+{
+  "name": "fina_r",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",  <-- 이 부분이 중요합니다.
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  // ... 나머지 dependencies와 devDependencies는 그대로 유지
+}
