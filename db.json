@@ -1,0 +1,1412 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "email": "money@example.com",
+      "password": "password123",
+      "name": "김머니",
+      "level": 12,
+      "currentExp": 2650,
+      "expToNextLevel": 3000,
+      "badges": [
+        "절약왕",
+        "세금마스터",
+        "챌린지러",
+        "출석왕",
+        "리뷰어"
+      ],
+      "points": 250,
+      "rank": 156,
+      "totalUsers": 15234,
+      "streak": 7,
+      "totalSaved": 1250000,
+      "taxHealthScore": 87,
+      "isPremium": true,
+      "userType": "individual",
+      "createdAt": "2025-10-01"
+    },
+    {
+      "id": "2",
+      "email": "test@example.com",
+      "password": "test1234",
+      "name": "테스트유저",
+      "level": 5,
+      "currentExp": 800,
+      "expToNextLevel": 1500,
+      "badges": [
+        "첫걸음"
+      ],
+      "points": 800,
+      "rank": 5234,
+      "totalUsers": 15234,
+      "streak": 3,
+      "totalSaved": 250000,
+      "taxHealthScore": 65,
+      "isPremium": false,
+      "userType": "individual",
+      "createdAt": "2025-11-01"
+    }
+  ],
+  "receipts": [
+    {
+      "id": "1",
+      "userId": 1,
+      "date": "2025-11-15",
+      "merchant": "스타벅스",
+      "category": "식비",
+      "amount": 15000,
+      "tax": 1500,
+      "type": "manual",
+      "createdAt": "2025-11-15T10:30:00Z"
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "date": "2025-11-14",
+      "merchant": "GS25",
+      "category": "편의점",
+      "amount": 8000,
+      "tax": 800,
+      "type": "manual",
+      "createdAt": "2025-11-14T14:20:00Z"
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "date": "2025-11-13",
+      "merchant": "교보문고",
+      "category": "도서/교육",
+      "amount": 35000,
+      "tax": 3500,
+      "type": "manual",
+      "createdAt": "2025-11-13T16:45:00Z"
+    },
+    {
+      "id": "4",
+      "userId": 1,
+      "date": "2025-11-12",
+      "merchant": "올리브영",
+      "category": "생활용품",
+      "amount": 42000,
+      "tax": 4200,
+      "type": "manual",
+      "createdAt": "2025-11-12T11:10:00Z"
+    },
+    {
+      "id": "5",
+      "userId": 1,
+      "date": "2025-11-11",
+      "merchant": "CU편의점",
+      "category": "식비",
+      "amount": 12000,
+      "tax": 1200,
+      "type": "manual",
+      "createdAt": "2025-11-11T08:50:00Z"
+    },
+    {
+      "id": "6",
+      "userId": 1,
+      "date": "2025-11-10",
+      "merchant": "이마트",
+      "category": "식료품",
+      "amount": 89000,
+      "tax": 8900,
+      "type": "manual",
+      "createdAt": "2025-11-10T15:30:00Z"
+    },
+    {
+      "id": "7",
+      "userId": 1,
+      "date": "2025-11-09",
+      "merchant": "카페베네",
+      "category": "식비",
+      "amount": 18000,
+      "tax": 1800,
+      "type": "manual",
+      "createdAt": "2025-11-09T13:00:00Z"
+    },
+    {
+      "id": "8",
+      "userId": 1,
+      "date": "2025-11-08",
+      "merchant": "다이소",
+      "category": "생활용품",
+      "amount": 15000,
+      "tax": 1500,
+      "type": "manual",
+      "createdAt": "2025-11-08T17:20:00Z"
+    },
+    {
+      "id": "f171",
+      "userId": 1,
+      "date": "2025-11-21",
+      "merchant": "다이소 ",
+      "category": "생활용품",
+      "amount": 1000,
+      "tax": 100,
+      "type": "manual",
+      "createdAt": "2025-11-21T13:49:12.258Z"
+    },
+    {
+      "id": "0f15",
+      "userId": 1,
+      "date": "2025-11-21",
+      "merchant": "SADFAS",
+      "category": "도서/교육",
+      "amount": 1213,
+      "tax": 121,
+      "type": "manual",
+      "createdAt": "2025-11-21T13:49:25.742Z"
+    }
+  ],
+  "autoTransactions": [
+    {
+      "id": "a1",
+      "userId": 1,
+      "date": "2025-11-18",
+      "merchant": "CU편의점 강남점",
+      "category": "편의점",
+      "amount": 8500,
+      "tax": 850,
+      "accountId": 1,
+      "matched": false,
+      "ocrConfidence": 0.98
+    },
+    {
+      "id": "a2",
+      "userId": 1,
+      "date": "2025-11-18",
+      "merchant": "스타벅스 역삼점",
+      "category": "식비",
+      "amount": 14800,
+      "tax": 1480,
+      "accountId": 1,
+      "matched": false,
+      "ocrConfidence": 0.95
+    },
+    {
+      "id": "a3",
+      "userId": 1,
+      "date": "2025-11-17",
+      "merchant": "이마트 트레이더스",
+      "category": "식료품",
+      "amount": 125000,
+      "tax": 12500,
+      "accountId": 2,
+      "matched": false,
+      "ocrConfidence": 0.99
+    },
+    {
+      "id": "a4",
+      "userId": 1,
+      "date": "2025-11-17",
+      "merchant": "카카오T",
+      "category": "교통",
+      "amount": 15300,
+      "tax": 1530,
+      "accountId": 3,
+      "matched": false,
+      "ocrConfidence": 0.97
+    },
+    {
+      "id": "a5",
+      "userId": 1,
+      "date": "2025-11-16",
+      "merchant": "CGV 강남",
+      "category": "문화/여가",
+      "amount": 28000,
+      "tax": 2800,
+      "accountId": 1,
+      "matched": false,
+      "ocrConfidence": 0.96
+    },
+    {
+      "id": "a6",
+      "userId": 1,
+      "date": "2025-11-16",
+      "merchant": "올리브영 선릉점",
+      "category": "생활용품",
+      "amount": 45600,
+      "tax": 4560,
+      "accountId": 2,
+      "matched": false,
+      "ocrConfidence": 0.94
+    },
+    {
+      "id": "a7",
+      "userId": 1,
+      "date": "2025-11-15",
+      "merchant": "GS25 역삼점",
+      "category": "편의점",
+      "amount": 12400,
+      "tax": 1240,
+      "accountId": 1,
+      "matched": false,
+      "ocrConfidence": 0.98
+    },
+    {
+      "id": "a8",
+      "userId": 1,
+      "date": "2025-11-15",
+      "merchant": "교보문고",
+      "category": "도서/교육",
+      "amount": 38900,
+      "tax": 3890,
+      "accountId": 2,
+      "matched": false,
+      "ocrConfidence": 0.99
+    }
+  ],
+  "linkedAccounts": [
+    {
+      "id": "1",
+      "userId": 1,
+      "type": "credit",
+      "bank": "신한카드",
+      "name": "신한 Deep Dream",
+      "lastDigits": "1234",
+      "color": "blue",
+      "icon": "💳",
+      "linkedDate": "2025-11-01",
+      "status": "active",
+      "monthlySpent": 1234500,
+      "transactionCount": 45
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "type": "debit",
+      "bank": "KB국민은행",
+      "name": "KB Star 체크카드",
+      "lastDigits": "5678",
+      "color": "yellow",
+      "icon": "💳",
+      "linkedDate": "2025-11-01",
+      "status": "active",
+      "monthlySpent": 567800,
+      "transactionCount": 28
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "type": "account",
+      "bank": "카카오뱅크",
+      "name": "입출금 통장",
+      "lastDigits": "9012",
+      "color": "purple",
+      "icon": "🏦",
+      "linkedDate": "2025-11-02",
+      "status": "active",
+      "monthlySpent": 342100,
+      "transactionCount": 15
+    },
+    {
+      "id": "065f",
+      "userId": 1,
+      "type": "credit",
+      "bank": "삼성카드",
+      "name": "삼성카드 계좌",
+      "lastDigits": "1881",
+      "color": "blue",
+      "icon": "💳",
+      "linkedDate": "2025-11-21",
+      "status": "active",
+      "monthlySpent": 0,
+      "transactionCount": 0
+    },
+    {
+      "id": "20bd",
+      "userId": 1,
+      "type": "account",
+      "bank": "카카오뱅크",
+      "name": "카카오뱅크 계좌",
+      "lastDigits": "8705",
+      "color": "yellow",
+      "icon": "🏦",
+      "linkedDate": "2025-11-21",
+      "status": "active",
+      "monthlySpent": 0,
+      "transactionCount": 0
+    },
+    {
+      "id": "62b6",
+      "userId": 1,
+      "type": "account",
+      "bank": "카카오뱅크",
+      "name": "카카오뱅크 계좌",
+      "lastDigits": "3019",
+      "color": "yellow",
+      "icon": "🏦",
+      "linkedDate": "2025-11-21",
+      "status": "active",
+      "monthlySpent": 0,
+      "transactionCount": 0
+    },
+    {
+      "id": "f9e3",
+      "userId": 1,
+      "type": "credit",
+      "bank": "현대카드",
+      "name": "현대카드 계좌",
+      "lastDigits": "7322",
+      "color": "purple",
+      "icon": "💳",
+      "linkedDate": "2025-11-21",
+      "status": "active",
+      "monthlySpent": 0,
+      "transactionCount": 0
+    }
+  ],
+  "budgets": [
+    {
+      "id": "1",
+      "userId": 1,
+      "category": "식비",
+      "amount": 300000,
+      "month": "2025-11"
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "category": "교통",
+      "amount": 100000,
+      "month": "2025-11"
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "category": "생활용품",
+      "amount": 150000,
+      "month": "2025-11"
+    },
+    {
+      "id": "4",
+      "userId": 1,
+      "category": "문화/여가",
+      "amount": 200000,
+      "month": "2025-11"
+    },
+    {
+      "id": "5",
+      "userId": 1,
+      "category": "도서/교육",
+      "amount": 100000,
+      "month": "2025-11"
+    },
+    {
+      "id": "6",
+      "userId": 1,
+      "category": "의료",
+      "amount": 50000,
+      "month": "2025-11"
+    },
+    {
+      "id": "7",
+      "userId": 1,
+      "category": "기타",
+      "amount": 100000,
+      "month": "2025-11"
+    }
+  ],
+  "challenges": [
+    {
+      "id": "1",
+      "title": "식비 20% 절감",
+      "description": "이번 달 식비를 지난 달 대비 20% 줄이기",
+      "progress": 65,
+      "target": 100,
+      "reward": 200,
+      "badge": "🍽️",
+      "status": "active",
+      "daysLeft": 8,
+      "difficulty": "medium"
+    },
+    {
+      "id": "2",
+      "title": "영수증 30개 등록",
+      "description": "한 달 동안 영수증 30개 이상 등록하기",
+      "progress": 22,
+      "target": 30,
+      "reward": 150,
+      "badge": "📝",
+      "status": "active",
+      "daysLeft": 8,
+      "difficulty": "easy"
+    },
+    {
+      "id": "3",
+      "title": "예산 준수 완벽왕",
+      "description": "모든 카테고리에서 예산을 초과하지 않기",
+      "progress": 85,
+      "target": 100,
+      "reward": 300,
+      "badge": "🎯",
+      "status": "active",
+      "daysLeft": 8,
+      "difficulty": "hard"
+    },
+    {
+      "id": "4",
+      "title": "커뮤니티 활동가",
+      "description": "질문 5개 작성하고 답변 10개 달기",
+      "progress": 6,
+      "target": 15,
+      "reward": 250,
+      "badge": "💬",
+      "status": "active",
+      "daysLeft": 15,
+      "difficulty": "medium"
+    }
+  ],
+  "completedChallenges": [
+    {
+      "id": "1",
+      "userId": 1,
+      "title": "첫 영수증 등록",
+      "badge": "🎉",
+      "reward": 100,
+      "completedDate": "2025-11-10"
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "title": "7일 연속 출석",
+      "badge": "🔥",
+      "reward": 200,
+      "completedDate": "2025-11-08"
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "title": "예산 첫 설정",
+      "badge": "💰",
+      "reward": 50,
+      "completedDate": "2025-11-05"
+    }
+  ],
+  "dailyMissions": [
+    {
+      "id": "1",
+      "userId": 1,
+      "title": "영수증 3개 등록하기",
+      "progress": 2,
+      "target": 3,
+      "reward": 50,
+      "completed": false,
+      "date": "2025-11-21"
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "title": "예산 점검하기",
+      "progress": 0,
+      "target": 1,
+      "reward": 30,
+      "completed": false,
+      "date": "2025-11-21"
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "title": "금융 상품 둘러보기",
+      "progress": 0,
+      "target": 1,
+      "reward": 20,
+      "completed": false,
+      "date": "2025-11-21"
+    }
+  ],
+  "weeklyMissions": [
+    {
+      "id": "1",
+      "userId": 1,
+      "title": "영수증 20개 등록",
+      "progress": 12,
+      "target": 20,
+      "reward": 300,
+      "completed": false,
+      "weekStart": "2025-11-18"
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "title": "예산 초과 0회",
+      "progress": 5,
+      "target": 7,
+      "reward": 500,
+      "completed": false,
+      "weekStart": "2025-11-18"
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "title": "커뮤니티 질문 3회",
+      "progress": 1,
+      "target": 3,
+      "reward": 200,
+      "completed": false,
+      "weekStart": "2025-11-18"
+    }
+  ],
+  "leaderboard": [
+    {
+      "id": "1",
+      "rank": 1,
+      "name": "절약마스터",
+      "points": 8750,
+      "badge": "👑"
+    },
+    {
+      "id": "2",
+      "rank": 2,
+      "name": "돈모으기왕",
+      "points": 7320,
+      "badge": "🥈"
+    },
+    {
+      "id": "3",
+      "rank": 3,
+      "name": "재테크고수",
+      "points": 6890,
+      "badge": "🥉"
+    },
+    {
+      "id": "4",
+      "rank": 156,
+      "name": "김머니 (나)",
+      "points": 2450,
+      "badge": "⭐",
+      "isUser": true,
+      "userId": 1
+    }
+  ],
+  "rewards": [
+    {
+      "id": "1",
+      "name": "스타벅스 아메리카노",
+      "description": "스타벅스 아메리카노 Tall",
+      "points": 500,
+      "icon": "☕",
+      "category": "coffee",
+      "stock": "unlimited"
+    },
+    {
+      "id": "2",
+      "name": "GS25 5천원권",
+      "description": "GS25 편의점 상품권 5,000원",
+      "points": 450,
+      "icon": "🏪",
+      "category": "voucher",
+      "stock": "unlimited"
+    },
+    {
+      "id": "3",
+      "name": "쿠팡 1만원 할인쿠폰",
+      "description": "쿠팡에서 사용 가능한 만원 할인",
+      "points": 900,
+      "icon": "🛒",
+      "category": "voucher",
+      "stock": "limited"
+    },
+    {
+      "id": "4",
+      "name": "올리브영 5천원권",
+      "description": "올리브영 상품권 5,000원",
+      "points": 450,
+      "icon": "💄",
+      "category": "beauty",
+      "stock": "unlimited"
+    },
+    {
+      "id": "5",
+      "name": "카카오톡 이모티콘",
+      "description": "인기 이모티콘 1개",
+      "points": 300,
+      "icon": "😊",
+      "category": "digital",
+      "stock": "unlimited"
+    },
+    {
+      "id": "6",
+      "name": "프리미엄 1개월 무료",
+      "description": "프리미엄 기능 1개월 무료 체험",
+      "points": 2000,
+      "icon": "👑",
+      "category": "premium",
+      "stock": "limited"
+    }
+  ],
+  "events": [
+    {
+      "id": "1",
+      "title": "🎉 신규 가입 이벤트",
+      "description": "7일 연속 출석하면 스타벅스 쿠폰 증정!",
+      "endDate": "2025-12-31",
+      "reward": "스타벅스 아메리카노",
+      "progress": 5,
+      "target": 7,
+      "type": "attendance",
+      "active": true
+    },
+    {
+      "id": "2",
+      "title": "💰 11월 절약왕 챌린지",
+      "description": "이번 달 가장 많이 절약한 Top 100에게 추가 포인트!",
+      "endDate": "2025-11-30",
+      "reward": "1,000P ~ 10,000P",
+      "type": "competition",
+      "active": true
+    },
+    {
+      "id": "3",
+      "title": "🎁 친구 초대 이벤트",
+      "description": "친구 1명 초대 시 양쪽 모두 500P 지급",
+      "endDate": "상시",
+      "reward": "500P",
+      "type": "referral",
+      "active": true
+    }
+  ],
+  "notifications": [
+    {
+      "id": "1",
+      "userId": 1,
+      "type": "savings",
+      "title": "스타벅스 할인 기회!",
+      "description": "KB국민카드로 전환 시 월 4,500원 절감",
+      "icon": "☕",
+      "savings": 4500,
+      "priority": "high",
+      "read": false,
+      "createdAt": "2025-11-21T09:00:00Z"
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "type": "alert",
+      "title": "식비 예산 80% 도달",
+      "description": "이번 달 식비가 예산의 80%에 도달했습니다",
+      "icon": "🍴",
+      "priority": "medium",
+      "read": false,
+      "createdAt": "2025-11-21T08:30:00Z"
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "type": "tax",
+      "title": "종합소득세 예상",
+      "description": "5월 예상 납부액 전년 대비 18% 증가 예상",
+      "icon": "📋",
+      "priority": "high",
+      "read": true,
+      "createdAt": "2025-11-20T15:00:00Z"
+    }
+  ],
+  "notificationCenter": [
+    {
+      "id": "1",
+      "userId": 1,
+      "type": "ai_insight",
+      "title": "의료비 공제 기회 발견",
+      "message": "11만원 추가 지출 시 13만원 공제 가능",
+      "timestamp": "방금 전",
+      "read": false,
+      "priority": "high"
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "type": "document",
+      "title": "증빙 서류 3건 자동 수집",
+      "message": "의료비 영수증이 자동으로 정리되었습니다",
+      "timestamp": "10분 전",
+      "read": false,
+      "priority": "medium"
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "type": "deadline",
+      "title": "연말정산 D-42",
+      "message": "놓치지 말고 공제 항목을 확인하세요",
+      "timestamp": "1시간 전",
+      "read": true,
+      "priority": "medium"
+    },
+    {
+      "id": "4",
+      "userId": 1,
+      "type": "achievement",
+      "title": "레벨 13 달성!",
+      "message": "500 포인트를 획득했습니다",
+      "timestamp": "2시간 전",
+      "read": true,
+      "priority": "low"
+    }
+  ],
+  "aiInsights": [
+    {
+      "id": "1",
+      "userId": 1,
+      "type": "critical",
+      "category": "medical",
+      "title": "의료비 공제 임계값 근접!",
+      "description": "현재 의료비 89만원. 11만원 더 지출 시 추가 공제 13만원 발생",
+      "potentialSaving": 130000,
+      "currentAmount": 890000,
+      "threshold": 1000000,
+      "action": "의료비 지출 계획하기",
+      "deadline": "2025-12-31",
+      "priority": "high"
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "type": "opportunity",
+      "category": "education",
+      "title": "교육비 공제 한도 미달",
+      "description": "교육비 공제 한도(300만원) 중 45% 미사용. 온라인 강의/도서 구매 시 추가 세액공제 가능",
+      "potentialSaving": 165000,
+      "currentAmount": 1650000,
+      "threshold": 3000000,
+      "action": "교육비 활용하기",
+      "deadline": "2025-12-31",
+      "priority": "medium"
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "type": "warning",
+      "category": "card",
+      "title": "신용카드 공제 최적화",
+      "description": "현재 신용카드 비중 85%. 체크카드로 전환 시 공제율 15%→30%로 증가",
+      "potentialSaving": 450000,
+      "currentRatio": 85,
+      "optimalRatio": 50,
+      "action": "카드 사용 전략 보기",
+      "priority": "high"
+    },
+    {
+      "id": "4",
+      "userId": 1,
+      "type": "achievement",
+      "category": "housing",
+      "title": "월세 공제 완료",
+      "description": "월세 납부 증빙 12건 자동 수집 완료. 최대 공제액(750만원) 달성",
+      "potentialSaving": 0,
+      "status": "completed",
+      "action": "증빙 서류 보기",
+      "priority": "low"
+    }
+  ],
+  "deductionTracker": [
+    {
+      "id": "1",
+      "userId": 1,
+      "category": "medical",
+      "name": "의료비",
+      "current": 890000,
+      "threshold": 1000000,
+      "maxDeduction": 7000000,
+      "deductionRate": 0.15,
+      "potentialSaving": 130000,
+      "color": "red",
+      "documents": 12
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "category": "education",
+      "name": "교육비",
+      "current": 1650000,
+      "threshold": 0,
+      "maxDeduction": 3000000,
+      "deductionRate": 0.15,
+      "potentialSaving": 165000,
+      "color": "blue",
+      "documents": 8
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "category": "housing",
+      "name": "월세",
+      "current": 9000000,
+      "threshold": 0,
+      "maxDeduction": 7500000,
+      "deductionRate": 0.12,
+      "potentialSaving": 0,
+      "color": "green",
+      "documents": 12
+    },
+    {
+      "id": "4",
+      "userId": 1,
+      "category": "donation",
+      "name": "기부금",
+      "current": 500000,
+      "threshold": 0,
+      "maxDeduction": 10000000,
+      "deductionRate": 0.15,
+      "potentialSaving": 75000,
+      "color": "pink",
+      "documents": 3
+    },
+    {
+      "id": "5",
+      "userId": 1,
+      "category": "pension",
+      "name": "연금저축",
+      "current": 4000000,
+      "threshold": 0,
+      "maxDeduction": 4000000,
+      "deductionRate": 0.15,
+      "potentialSaving": 0,
+      "color": "purple",
+      "documents": 12
+    }
+  ],
+  "documentSpace": [
+    {
+      "id": "1",
+      "userId": 1,
+      "type": "yearEnd",
+      "name": "연말정산",
+      "count": 45,
+      "folders": [
+        {
+          "name": "의료비",
+          "count": 12,
+          "lastUpdated": "2025-11-18"
+        },
+        {
+          "name": "교육비",
+          "count": 8,
+          "lastUpdated": "2025-11-15"
+        },
+        {
+          "name": "기부금",
+          "count": 3,
+          "lastUpdated": "2025-11-10"
+        },
+        {
+          "name": "신용카드",
+          "count": 18,
+          "lastUpdated": "2025-11-18"
+        },
+        {
+          "name": "주택자금",
+          "count": 4,
+          "lastUpdated": "2025-11-01"
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "type": "comprehensiveTax",
+      "name": "종합소득세",
+      "count": 32,
+      "folders": [
+        {
+          "name": "사업소득",
+          "count": 12,
+          "lastUpdated": "2025-11-18"
+        },
+        {
+          "name": "경비증빙",
+          "count": 15,
+          "lastUpdated": "2025-11-17"
+        },
+        {
+          "name": "매입세액",
+          "count": 5,
+          "lastUpdated": "2025-11-10"
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "type": "vat",
+      "name": "부가가치세",
+      "count": 28,
+      "folders": [
+        {
+          "name": "매출",
+          "count": 12,
+          "lastUpdated": "2025-11-18"
+        },
+        {
+          "name": "매입",
+          "count": 16,
+          "lastUpdated": "2025-11-18"
+        }
+      ]
+    }
+  ],
+  "individualTaxData": [
+    {
+      "id": "1",
+      "userId": 1,
+      "month": "1월",
+      "actual": 850000,
+      "predicted": 850000,
+      "expense": 1200000
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "month": "2월",
+      "actual": 920000,
+      "predicted": 920000,
+      "expense": 1300000
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "month": "3월",
+      "actual": 1100000,
+      "predicted": 1100000,
+      "expense": 1450000
+    },
+    {
+      "id": "4",
+      "userId": 1,
+      "month": "4월",
+      "actual": 950000,
+      "predicted": 950000,
+      "expense": 1250000
+    },
+    {
+      "id": "5",
+      "userId": 1,
+      "month": "5월",
+      "actual": 1200000,
+      "predicted": 1200000,
+      "expense": 1600000
+    },
+    {
+      "id": "6",
+      "userId": 1,
+      "month": "6월",
+      "actual": 0,
+      "predicted": 1150000,
+      "expense": 1500000
+    },
+    {
+      "id": "7",
+      "userId": 1,
+      "month": "7월",
+      "actual": 0,
+      "predicted": 1250000,
+      "expense": 1650000
+    },
+    {
+      "id": "8",
+      "userId": 1,
+      "month": "8월",
+      "actual": 0,
+      "predicted": 1300000,
+      "expense": 1700000
+    },
+    {
+      "id": "9",
+      "userId": 1,
+      "month": "9월",
+      "actual": 0,
+      "predicted": 1200000,
+      "expense": 1550000
+    },
+    {
+      "id": "10",
+      "userId": 1,
+      "month": "10월",
+      "actual": 0,
+      "predicted": 1350000,
+      "expense": 1750000
+    },
+    {
+      "id": "11",
+      "userId": 1,
+      "month": "11월",
+      "actual": 0,
+      "predicted": 1400000,
+      "expense": 1800000
+    },
+    {
+      "id": "12",
+      "userId": 1,
+      "month": "12월",
+      "actual": 0,
+      "predicted": 1450000,
+      "expense": 1850000
+    }
+  ],
+  "businessTaxData": [
+    {
+      "id": "1",
+      "userId": 1,
+      "month": "1월",
+      "actual": 2800000,
+      "predicted": 2800000,
+      "income": 8500000,
+      "expense": 4200000,
+      "vat": 420000
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "month": "2월",
+      "actual": 3200000,
+      "predicted": 3200000,
+      "income": 9200000,
+      "expense": 4500000,
+      "vat": 450000
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "month": "3월",
+      "actual": 3500000,
+      "predicted": 3500000,
+      "income": 10500000,
+      "expense": 5000000,
+      "vat": 500000
+    },
+    {
+      "id": "4",
+      "userId": 1,
+      "month": "4월",
+      "actual": 2900000,
+      "predicted": 2900000,
+      "income": 8800000,
+      "expense": 4300000,
+      "vat": 430000
+    },
+    {
+      "id": "5",
+      "userId": 1,
+      "month": "5월",
+      "actual": 3800000,
+      "predicted": 3800000,
+      "income": 11200000,
+      "expense": 5500000,
+      "vat": 550000
+    },
+    {
+      "id": "6",
+      "userId": 1,
+      "month": "6월",
+      "actual": 0,
+      "predicted": 3600000,
+      "income": 10500000,
+      "expense": 5200000,
+      "vat": 520000
+    },
+    {
+      "id": "7",
+      "userId": 1,
+      "month": "7월",
+      "actual": 0,
+      "predicted": 3900000,
+      "income": 11800000,
+      "expense": 5800000,
+      "vat": 580000
+    },
+    {
+      "id": "8",
+      "userId": 1,
+      "month": "8월",
+      "actual": 0,
+      "predicted": 4200000,
+      "income": 12500000,
+      "expense": 6200000,
+      "vat": 620000
+    },
+    {
+      "id": "9",
+      "userId": 1,
+      "month": "9월",
+      "actual": 0,
+      "predicted": 3700000,
+      "income": 11000000,
+      "expense": 5400000,
+      "vat": 540000
+    },
+    {
+      "id": "10",
+      "userId": 1,
+      "month": "10월",
+      "actual": 0,
+      "predicted": 4100000,
+      "income": 12200000,
+      "expense": 6000000,
+      "vat": 600000
+    },
+    {
+      "id": "11",
+      "userId": 1,
+      "month": "11월",
+      "actual": 0,
+      "predicted": 4300000,
+      "income": 12800000,
+      "expense": 6300000,
+      "vat": 630000
+    },
+    {
+      "id": "12",
+      "userId": 1,
+      "month": "12월",
+      "actual": 0,
+      "predicted": 4500000,
+      "income": 13500000,
+      "expense": 6700000,
+      "vat": 670000
+    }
+  ],
+  "communityPosts": [
+    {
+      "id": "1",
+      "author": "익명의 프리랜서",
+      "title": "프리랜서 종소세 신고 시 업무용 태블릿 구매 비용 공제 가능한가요?",
+      "answers": 12,
+      "likes": 34,
+      "createdAt": "2025-11-20T14:30:00Z"
+    },
+    {
+      "id": "2",
+      "author": "절약왕김씨",
+      "title": "1인 가구 월 50만원으로 생활 가능할까요?",
+      "answers": 28,
+      "likes": 67,
+      "createdAt": "2025-11-19T10:15:00Z"
+    }
+  ],
+  "taxExperts": [
+    {
+      "id": "1",
+      "name": "김세무",
+      "title": "세무사",
+      "rating": 4.9,
+      "reviews": 284,
+      "specialties": [
+        "프리랜서",
+        "소상공인",
+        "부가세 신고"
+      ],
+      "price": 50000,
+      "experience": 15,
+      "image": "👨‍💼"
+    },
+    {
+      "id": "2",
+      "name": "이회계",
+      "title": "공인회계사",
+      "rating": 4.8,
+      "reviews": 192,
+      "specialties": [
+        "종합소득세",
+        "법인세",
+        "재무컨설팅"
+      ],
+      "price": 80000,
+      "experience": 12,
+      "image": "👩‍💼"
+    }
+  ],
+  "financialProducts": [
+    {
+      "id": "1",
+      "type": "card",
+      "name": "비즈니스 플러스 카드",
+      "provider": "신한카드",
+      "rating": 4.7,
+      "benefit": "사무용품 5% 캐시백",
+      "matchScore": 95,
+      "icon": "💳",
+      "expectedSavings": 45000
+    },
+    {
+      "id": "2",
+      "type": "loan",
+      "name": "사업자 신용대출",
+      "provider": "KB국민은행",
+      "rating": 4.5,
+      "benefit": "연 3.5% 저금리",
+      "matchScore": 88,
+      "icon": "🏦",
+      "expectedSavings": 500000
+    }
+  ],
+  "availableBanks": [
+    {
+      "id": "1",
+      "name": "신한은행",
+      "icon": "🏦",
+      "color": "blue"
+    },
+    {
+      "id": "2",
+      "name": "KB국민은행",
+      "icon": "🏦",
+      "color": "yellow"
+    },
+    {
+      "id": "3",
+      "name": "우리은행",
+      "icon": "🏦",
+      "color": "cyan"
+    },
+    {
+      "id": "4",
+      "name": "하나은행",
+      "icon": "🏦",
+      "color": "green"
+    },
+    {
+      "id": "5",
+      "name": "NH농협",
+      "icon": "🏦",
+      "color": "green"
+    },
+    {
+      "id": "6",
+      "name": "카카오뱅크",
+      "icon": "🏦",
+      "color": "yellow"
+    },
+    {
+      "id": "7",
+      "name": "토스뱅크",
+      "icon": "🏦",
+      "color": "blue"
+    },
+    {
+      "id": "8",
+      "name": "삼성카드",
+      "icon": "💳",
+      "color": "blue"
+    },
+    {
+      "id": "9",
+      "name": "현대카드",
+      "icon": "💳",
+      "color": "purple"
+    },
+    {
+      "id": "10",
+      "name": "BC카드",
+      "icon": "💳",
+      "color": "red"
+    }
+  ],
+  "attendance": [
+    {
+      "id": "1",
+      "userId": 1,
+      "date": "2025-11-15",
+      "checked": true,
+      "points": 50
+    },
+    {
+      "id": "2",
+      "userId": 1,
+      "date": "2025-11-16",
+      "checked": true,
+      "points": 50
+    },
+    {
+      "id": "3",
+      "userId": 1,
+      "date": "2025-11-17",
+      "checked": false,
+      "points": 0
+    },
+    {
+      "id": "4",
+      "userId": 1,
+      "date": "2025-11-18",
+      "checked": false,
+      "points": 0
+    },
+    {
+      "id": "5",
+      "userId": 1,
+      "date": "2025-11-19",
+      "checked": false,
+      "points": 0
+    },
+    {
+      "id": "6",
+      "userId": 1,
+      "date": "2025-11-20",
+      "checked": false,
+      "points": 0
+    },
+    {
+      "id": "7",
+      "userId": 1,
+      "date": "2025-11-21",
+      "checked": false,
+      "points": 0
+    }
+  ],
+  "rewardHistory": [
+    {
+      "id": "1",
+      "userId": 1,
+      "rewardId": 5,
+      "rewardName": "카카오톡 이모티콘",
+      "points": 300,
+      "exchangedAt": "2025-11-10T14:30:00Z",
+      "status": "delivered"
+    },
+    {
+      "id": "c219",
+      "userId": 1,
+      "rewardId": "2",
+      "rewardName": "GS25 5천원권",
+      "points": 450,
+      "exchangedAt": "2025-11-21T13:47:27.825Z",
+      "status": "pending"
+    },
+    {
+      "id": "7771",
+      "userId": 1,
+      "rewardId": "1",
+      "rewardName": "스타벅스 아메리카노",
+      "points": 500,
+      "exchangedAt": "2025-11-21T13:47:29.139Z",
+      "status": "pending"
+    },
+    {
+      "id": "3860",
+      "userId": 1,
+      "rewardId": "3",
+      "rewardName": "쿠팡 1만원 할인쿠폰",
+      "points": 900,
+      "exchangedAt": "2025-11-21T13:47:30.354Z",
+      "status": "pending"
+    },
+    {
+      "id": "9320",
+      "userId": 1,
+      "rewardId": "5",
+      "rewardName": "카카오톡 이모티콘",
+      "points": 300,
+      "exchangedAt": "2025-11-21T13:47:32.064Z",
+      "status": "pending"
+    },
+    {
+      "id": "2ef1",
+      "userId": 1,
+      "rewardId": "4",
+      "rewardName": "올리브영 5천원권",
+      "points": 450,
+      "exchangedAt": "2025-11-21T13:47:33.781Z",
+      "status": "pending"
+    }
+  ]
+}

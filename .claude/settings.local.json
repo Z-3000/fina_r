@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:full:*)",
+      "Bash(curl:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:fina-r.vercel.app)",
+      "Bash(dir \"C:\\Users\\jhson\\.claude\\config\" 2)",
+      "Bash(nul)",
+      "Bash(claude mcp list:*)",
+      "Bash(claude mcp add:*)",
+      "mcp__supabase__list_tables",
+      "WebFetch(domain:localhost)",
+      "mcp__supabase__list_projects",
+      "mcp__supabase__execute_sql",
+      "Bash(python:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
