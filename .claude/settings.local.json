@@ -15,7 +15,11 @@
       "WebFetch(domain:localhost)",
       "mcp__supabase__list_projects",
       "mcp__supabase__execute_sql",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebFetch(domain:fina-3iqaslffp-jhs-projects-bf7b5cfe.vercel.app)",
+      "Bash(git checkout:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(timeout 15 npm run dev)"
     ],
     "deny": [],
     "ask": []

@@ -339,7 +339,7 @@ const ReceiptFinancePlatform = () => {
         notificationCenterAPI.getAll(uid).catch(() => []),
         notificationsAPI.getAll(uid).catch(() => []),
         deductionAPI.getAll(uid, currentYear).catch(() => []),
-        documentFoldersAPI.getAll(uid).catch(() => {}),
+        documentFoldersAPI.getAll(uid).catch(() => { }),
         taxAPI.getIndividualTax(uid, currentYear).catch(() => []),
         taxAPI.getBusinessTax(uid, currentYear).catch(() => []),
         banksAPI.getAll().catch(() => []),
@@ -915,7 +915,7 @@ const ReceiptFinancePlatform = () => {
     try {
       let fileName = '';
       if (reportType === 'monthly') {
-        fileName = generateMonthlyExpenseReport({
+        fileName = await generateMonthlyExpenseReport({
           receipts,
           budgets,
           stats,
@@ -930,12 +930,12 @@ const ReceiptFinancePlatform = () => {
           pensionSavings: taxSimulatorData.pensionSavings,
           irpAmount: taxSimulatorData.irpAmount,
         });
-        fileName = generateYearEndTaxReport({
+        fileName = await generateYearEndTaxReport({
           taxResult,
           userProfile,
         });
       } else if (reportType === 'taxHealth') {
-        fileName = generateTaxHealthReport({
+        fileName = await generateTaxHealthReport({
           taxHealthScore,
           deductionTracker,
           userProfile,
@@ -1180,12 +1180,11 @@ const ReceiptFinancePlatform = () => {
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-blue-500" />
             <h3 className="font-bold text-lg">Tax Health Score™</h3>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${
-              taxHealthScore >= 90 ? 'bg-green-100 text-green-700' :
-              taxHealthScore >= 70 ? 'bg-blue-100 text-blue-700' :
-              taxHealthScore >= 50 ? 'bg-yellow-100 text-yellow-700' :
-              'bg-red-100 text-red-700'
-            }`}>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${taxHealthScore >= 90 ? 'bg-green-100 text-green-700' :
+                taxHealthScore >= 70 ? 'bg-blue-100 text-blue-700' :
+                  taxHealthScore >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-700'
+              }`}>
               {taxHealthScore >= 90 ? '최상' : taxHealthScore >= 70 ? '양호' : taxHealthScore >= 50 ? '보통' : '주의'}
             </span>
           </div>
@@ -1261,7 +1260,7 @@ const ReceiptFinancePlatform = () => {
             {(() => {
               const deductionUsage = Object.keys(deductionTracker).length > 0
                 ? Math.round(Object.values(deductionTracker).reduce((sum, item) =>
-                    sum + (item.current / item.maxDeduction), 0) / Object.keys(deductionTracker).length * 100)
+                  sum + (item.current / item.maxDeduction), 0) / Object.keys(deductionTracker).length * 100)
                 : 85;
               const documentCount = Object.values(deductionTracker).reduce((sum, item) => sum + (item.documents || 0), 0);
               const docCompleteness = Math.min(100, Math.round(documentCount / 30 * 100));
@@ -2052,11 +2051,10 @@ const ReceiptFinancePlatform = () => {
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`w-8 h-8 rounded text-sm font-medium transition ${
-                      currentPage === pageNum
+                    className={`w-8 h-8 rounded text-sm font-medium transition ${currentPage === pageNum
                         ? 'bg-blue-500 text-white'
                         : 'border hover:bg-gray-100'
-                    }`}
+                      }`}
                   >
                     {pageNum}
                   </button>
@@ -2236,7 +2234,7 @@ const ReceiptFinancePlatform = () => {
                     className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition font-medium"
                     title="상한 설정"
                   >
-                    상한: {(maxLimit/10000).toFixed(0)}만원
+                    상한: {(maxLimit / 10000).toFixed(0)}만원
                   </button>
                 </div>
                 <div className="flex items-center gap-3">
@@ -2857,17 +2855,15 @@ const ReceiptFinancePlatform = () => {
           <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setAuthMode('login')}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
-                authMode === 'login' ? 'bg-white shadow text-blue-600' : 'text-gray-600'
-              }`}
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${authMode === 'login' ? 'bg-white shadow text-blue-600' : 'text-gray-600'
+                }`}
             >
               로그인
             </button>
             <button
               onClick={() => setAuthMode('signup')}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
-                authMode === 'signup' ? 'bg-white shadow text-blue-600' : 'text-gray-600'
-              }`}
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${authMode === 'signup' ? 'bg-white shadow text-blue-600' : 'text-gray-600'
+                }`}
             >
               회원가입
             </button>
@@ -2875,9 +2871,8 @@ const ReceiptFinancePlatform = () => {
 
           {/* 에러 메시지 */}
           {authError && (
-            <div className={`mb-4 p-3 rounded-lg text-sm ${
-              authError.includes('확인') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}>
+            <div className={`mb-4 p-3 rounded-lg text-sm ${authError.includes('확인') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+              }`}>
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
                 {authError}
@@ -2961,7 +2956,7 @@ const ReceiptFinancePlatform = () => {
               className="w-full py-3 bg-[#FEE500] text-[#191919] font-semibold rounded-lg hover:bg-[#FDD835] transition flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3C6.477 3 2 6.463 2 10.714c0 2.804 1.862 5.263 4.643 6.634-.146.53-.925 3.403-.96 3.622 0 0-.02.166.088.229.108.063.235.014.235.014.31-.044 3.593-2.351 4.155-2.758.597.088 1.213.134 1.839.134 5.523 0 10-3.463 10-7.875S17.523 3 12 3z"/>
+                <path d="M12 3C6.477 3 2 6.463 2 10.714c0 2.804 1.862 5.263 4.643 6.634-.146.53-.925 3.403-.96 3.622 0 0-.02.166.088.229.108.063.235.014.235.014.31-.044 3.593-2.351 4.155-2.758.597.088 1.213.134 1.839.134 5.523 0 10-3.463 10-7.875S17.523 3 12 3z" />
               </svg>
               카카오로 시작하기
             </button>
@@ -4072,7 +4067,7 @@ const ReceiptFinancePlatform = () => {
                   <input
                     type="number"
                     value={taxSimulatorData.annualIncome}
-                    onChange={(e) => setTaxSimulatorData({...taxSimulatorData, annualIncome: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, annualIncome: parseInt(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="50,000,000"
                   />
@@ -4084,7 +4079,7 @@ const ReceiptFinancePlatform = () => {
                     <input
                       type="number"
                       value={taxSimulatorData.dependents}
-                      onChange={(e) => setTaxSimulatorData({...taxSimulatorData, dependents: parseInt(e.target.value) || 0})}
+                      onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, dependents: parseInt(e.target.value) || 0 })}
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                       min="0"
                     />
@@ -4094,7 +4089,7 @@ const ReceiptFinancePlatform = () => {
                       <input
                         type="checkbox"
                         checked={taxSimulatorData.hasSpouse}
-                        onChange={(e) => setTaxSimulatorData({...taxSimulatorData, hasSpouse: e.target.checked})}
+                        onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, hasSpouse: e.target.checked })}
                         className="w-5 h-5 text-blue-500 rounded"
                       />
                       <span className="text-sm">배우자 공제</span>
@@ -4108,7 +4103,7 @@ const ReceiptFinancePlatform = () => {
                   <input
                     type="number"
                     value={taxSimulatorData.medicalExpenses}
-                    onChange={(e) => setTaxSimulatorData({...taxSimulatorData, medicalExpenses: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, medicalExpenses: parseInt(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                   />
@@ -4119,7 +4114,7 @@ const ReceiptFinancePlatform = () => {
                     <input
                       type="number"
                       value={taxSimulatorData.pensionSavings}
-                      onChange={(e) => setTaxSimulatorData({...taxSimulatorData, pensionSavings: parseInt(e.target.value) || 0})}
+                      onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, pensionSavings: parseInt(e.target.value) || 0 })}
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0"
                     />
@@ -4129,7 +4124,7 @@ const ReceiptFinancePlatform = () => {
                     <input
                       type="number"
                       value={taxSimulatorData.irpAmount}
-                      onChange={(e) => setTaxSimulatorData({...taxSimulatorData, irpAmount: parseInt(e.target.value) || 0})}
+                      onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, irpAmount: parseInt(e.target.value) || 0 })}
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0"
                     />

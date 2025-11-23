@@ -1,126 +1,130 @@
+/**
+ * Tesseract.js OCR 서비스
+ * - 로컬에서 동작 (API 키 불필요)
+ * - 한국어 + 영어 인식
+ */
+
 import Tesseract from 'tesseract.js';
 
 // 카테고리 키워드 매핑
 const CATEGORY_KEYWORDS = {
-  '식비': ['카페', '커피', '스타벅스', '이디야', '투썸', '빽다방', '메가커피', '식당', '음식', '치킨', '피자', '햄버거', '맥도날드', 'KFC', '버거킹', '롯데리아', '배달', '요기요', '배민', '쿠팡이츠'],
+  '식비': ['카페', '커피', '스타벅스', '이디야', '투썸', '빽다방', '메가커피', '식당', '음식', '치킨', '피자', '햄버거', '맥도날드', 'KFC', '버거킹', '롯데리아', '배달', '요기요', '배민', '쿠팡이츠', '반찬', '김밥', '떡볶이', '분식', '밥', '국', '찌개', '고기', '삼겹살', '족발', '보쌈'],
   '편의점': ['CU', 'GS25', 'GS편의점', '세븐일레븐', '7-ELEVEN', '이마트24', '미니스톱', '편의점'],
-  '마트/식료품': ['이마트', '홈플러스', '롯데마트', '코스트코', '트레이더스', '하나로마트', '농협', '마트', '슈퍼'],
+  '마트/식료품': ['이마트', '홈플러스', '롯데마트', '코스트코', '트레이더스', '하나로마트', '농협', '마트', '슈퍼', '식자재'],
   '생활용품': ['다이소', '올리브영', '롭스', '시코르', '드럭스토어', '약국'],
-  '교통': ['주유소', 'SK에너지', 'GS칼텍스', 'S-OIL', '현대오일', '주유', '택시', '카카오T', '버스', '지하철', '교통'],
-  '문화/여가': ['CGV', '롯데시네마', '메가박스', '영화', '노래방', '볼링', 'PC방', '게임'],
+  '교통': ['주유소', 'SK에너지', 'GS칼텍스', 'S-OIL', '현대오일', '주유', '택시', '카카오T', '버스', '지하철', '교통', '톨게이트', '하이패스', '주차'],
+  '문화/여가': ['CGV', '롯데시네마', '메가박스', '영화', '노래방', '볼링', 'PC방', '게임', '넷플릭스'],
   '도서/교육': ['교보문고', '영풍문고', '알라딘', '예스24', '서점', '학원', '교육'],
-  '의료': ['병원', '의원', '클리닉', '약국', '치과', '안과', '피부과', '정형외과'],
-  '쇼핑': ['백화점', '롯데백화점', '신세계', '현대백화점', '아울렛', '쇼핑몰'],
+  '의료': ['병원', '의원', '클리닉', '약국', '치과', '안과', '피부과', '정형외과', '내과', '소아과'],
+  '쇼핑': ['백화점', '롯데백화점', '신세계', '현대백화점', '아울렛', '쇼핑몰', '무신사', '쿠팡'],
 };
 
-// 금액 패턴
-const AMOUNT_PATTERNS = [
-  /총\s*금?액?\s*:?\s*([\d,]+)\s*원?/i,
-  /합\s*계\s*:?\s*([\d,]+)\s*원?/i,
-  /결제\s*금?액?\s*:?\s*([\d,]+)\s*원?/i,
-  /Total\s*:?\s*([\d,]+)/i,
-  /금액\s*:?\s*([\d,]+)\s*원?/i,
-  /([\d,]+)\s*원/g,
-];
-
-// 날짜 패턴
-const DATE_PATTERNS = [
-  /(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/,
-  /(\d{2})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/,
-  /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/,
-];
-
-// 상호명 추출 패턴
-const MERCHANT_PATTERNS = [
-  /상\s*호\s*:?\s*(.+)/,
-  /가맹점\s*:?\s*(.+)/,
-  /매장\s*:?\s*(.+)/,
-];
-
 /**
- * OCR로 영수증 이미지에서 텍스트 추출
+ * Tesseract.js로 이미지에서 텍스트 추출
  */
-export const extractTextFromImage = async (imageFile, onProgress) => {
+export const recognizeText = async (imageFile, onProgress) => {
   try {
+    onProgress?.(10);
+
     const result = await Tesseract.recognize(
       imageFile,
       'kor+eng', // 한국어 + 영어
       {
         logger: (m) => {
-          if (onProgress && m.status === 'recognizing text') {
-            onProgress(Math.round(m.progress * 100));
+          if (m.status === 'recognizing text') {
+            const progress = Math.round(10 + m.progress * 80);
+            onProgress?.(progress);
           }
         },
       }
     );
 
+    onProgress?.(100);
+
     return {
       text: result.data.text,
-      confidence: result.data.confidence / 100,
-      words: result.data.words,
+      confidence: result.data.confidence,
+      words: result.data.words || [],
+      lines: result.data.lines || [],
     };
   } catch (error) {
-    console.error('OCR 텍스트 추출 실패:', error);
-    throw new Error('이미지에서 텍스트를 추출할 수 없습니다.');
+    console.error('Tesseract OCR 오류:', error);
+    throw new Error('텍스트 인식에 실패했습니다. 다시 시도해주세요.');
   }
 };
 
 /**
- * 추출된 텍스트에서 영수증 정보 파싱
+ * OCR 결과에서 영수증 정보 파싱
  */
-export const parseReceiptText = (text) => {
+export const parseReceiptFromText = (ocrResult) => {
   const result = {
     merchant: null,
     amount: null,
     date: null,
     category: '기타',
-    rawText: text,
+    items: [],
+    rawText: ocrResult.text || '',
+    confidence: ocrResult.confidence || 0,
   };
 
-  const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+  const text = ocrResult.text || '';
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // 1. 상호명 추출
-  for (const pattern of MERCHANT_PATTERNS) {
+  // 1. 상호명 추출 (첫 몇 줄에서 찾기)
+  for (const line of lines.slice(0, 5)) {
+    // 숫자만 있는 줄 제외
+    if (!/^[\d\s\-.:,]+$/.test(line) && line.length >= 2 && line.length <= 30) {
+      // 영수증, 카드전표 등 제외
+      if (!/(영수증|카드전표|거래명세|합계|총액|부가세|현금|카드)/i.test(line)) {
+        result.merchant = line;
+        break;
+      }
+    }
+  }
+
+  // 2. 금액 추출 (가장 큰 금액 = 총액으로 추정)
+  const amounts = [];
+  const amountPatterns = [
+    /합\s*계\s*[:\s]*([0-9,]+)/i,
+    /총\s*(금액|액)\s*[:\s]*([0-9,]+)/i,
+    /결제\s*(금액)?\s*[:\s]*([0-9,]+)/i,
+    /([0-9]{1,3}(?:,?[0-9]{3})+)\s*원?/g,
+  ];
+
+  // 합계/총액 패턴 먼저 시도
+  for (const pattern of amountPatterns.slice(0, 3)) {
     const match = text.match(pattern);
     if (match) {
-      result.merchant = match[1].trim();
-      break;
-    }
-  }
-
-  // 상호명이 없으면 첫 몇 줄에서 추출 시도
-  if (!result.merchant && lines.length > 0) {
-    // 첫 3줄 중에서 가장 가능성 있는 것 선택
-    for (let i = 0; i < Math.min(3, lines.length); i++) {
-      const line = lines[i];
-      // 숫자만 있는 라인이나 너무 짧은 라인 제외
-      if (line.length >= 2 && !/^[\d\s\-.:]+$/.test(line)) {
-        result.merchant = line.replace(/[^\w가-힣\s]/g, '').trim();
-        if (result.merchant.length >= 2) break;
+      const numStr = (match[2] || match[1]).replace(/,/g, '');
+      const num = parseInt(numStr, 10);
+      if (num >= 100 && num < 100000000) {
+        result.amount = num;
+        break;
       }
     }
   }
 
-  // 2. 금액 추출 (가장 큰 금액을 총액으로 간주)
-  const amounts = [];
-  for (const pattern of AMOUNT_PATTERNS) {
-    const matches = text.matchAll(new RegExp(pattern.source, 'gi'));
-    for (const match of matches) {
-      const amountStr = match[1] || match[0];
-      const amount = parseInt(amountStr.replace(/[^\d]/g, ''), 10);
-      if (amount > 0 && amount < 100000000) { // 1억 미만만 유효
-        amounts.push(amount);
+  // 합계 패턴 없으면 모든 금액에서 최대값
+  if (!result.amount) {
+    const allMatches = text.match(/([0-9]{1,3}(?:,?[0-9]{3})+)/g) || [];
+    for (const m of allMatches) {
+      const num = parseInt(m.replace(/,/g, ''), 10);
+      if (num >= 100 && num < 100000000) {
+        amounts.push(num);
       }
     }
-  }
-
-  if (amounts.length > 0) {
-    // 가장 큰 금액을 총액으로 (보통 합계가 가장 큼)
-    result.amount = Math.max(...amounts);
+    if (amounts.length > 0) {
+      result.amount = Math.max(...amounts);
+    }
   }
 
   // 3. 날짜 추출
-  for (const pattern of DATE_PATTERNS) {
+  const datePatterns = [
+    /(\d{4})[.\-\/년]\s*(\d{1,2})[.\-\/월]\s*(\d{1,2})/,
+    /(\d{2})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/,
+  ];
+
+  for (const pattern of datePatterns) {
     const match = text.match(pattern);
     if (match) {
       let year = parseInt(match[1], 10);
@@ -129,10 +133,9 @@ export const parseReceiptText = (text) => {
 
       // 2자리 연도 처리
       if (year < 100) {
-        year += 2000;
+        year = 2000 + year;
       }
 
-      // 유효성 검사
       if (year >= 2020 && year <= 2030 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
         result.date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         break;
@@ -146,29 +149,15 @@ export const parseReceiptText = (text) => {
   }
 
   // 4. 카테고리 추론
-  const textLower = text.toLowerCase();
+  const searchText = `${result.merchant || ''} ${result.rawText}`.toLowerCase();
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     for (const keyword of keywords) {
-      if (textLower.includes(keyword.toLowerCase())) {
+      if (searchText.includes(keyword.toLowerCase())) {
         result.category = category;
         break;
       }
     }
     if (result.category !== '기타') break;
-  }
-
-  // 상호명으로도 카테고리 추론 시도
-  if (result.category === '기타' && result.merchant) {
-    const merchantLower = result.merchant.toLowerCase();
-    for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-      for (const keyword of keywords) {
-        if (merchantLower.includes(keyword.toLowerCase())) {
-          result.category = category;
-          break;
-        }
-      }
-      if (result.category !== '기타') break;
-    }
   }
 
   return result;
@@ -178,17 +167,21 @@ export const parseReceiptText = (text) => {
  * 이미지 파일에서 영수증 정보 추출 (통합 함수)
  */
 export const processReceiptImage = async (imageFile, onProgress) => {
-  // 1. OCR 텍스트 추출
-  const ocrResult = await extractTextFromImage(imageFile, onProgress);
+  try {
+    // Tesseract OCR 호출
+    const ocrResult = await recognizeText(imageFile, onProgress);
 
-  // 2. 텍스트 파싱
-  const parsedData = parseReceiptText(ocrResult.text);
+    // 결과 파싱
+    const parsedData = parseReceiptFromText(ocrResult);
 
-  return {
-    ...parsedData,
-    confidence: ocrResult.confidence,
-    ocrText: ocrResult.text,
-  };
+    return {
+      ...parsedData,
+      ocrResult, // 디버깅용 원본 결과
+    };
+  } catch (error) {
+    console.error('영수증 처리 실패:', error);
+    throw new Error('영수증 인식에 실패했습니다. 다시 시도해주세요.');
+  }
 };
 
 /**
@@ -237,8 +230,8 @@ export const compressImage = async (file, maxWidth = 1200) => {
 };
 
 export default {
-  extractTextFromImage,
-  parseReceiptText,
+  recognizeText,
+  parseReceiptFromText,
   processReceiptImage,
   createImagePreview,
   compressImage,
