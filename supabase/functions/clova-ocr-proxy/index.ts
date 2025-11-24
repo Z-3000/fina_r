@@ -19,13 +19,17 @@ serve(async (req) => {
             throw new Error("Missing CLOVA OCR configuration");
         }
 
-        const { images, requestId, timestamp, version } = await req.json();
+        const { imageBase64, imageFormat, requestId, timestamp, version } = await req.json();
 
-        if (!images || !Array.isArray(images)) {
-            throw new Error("Invalid request body: 'images' array is required");
+        if (!imageBase64) {
+            throw new Error("Invalid request body: 'imageBase64' is required");
         }
 
-        console.log(`Processing OCR request: ${requestId}`);
+        // Generate a unique request ID if not provided
+        const finalRequestId = requestId || crypto.randomUUID();
+        const finalTimestamp = timestamp || Date.now();
+
+        console.log(`Processing OCR request: ${finalRequestId}`);
 
         const response = await fetch(CLOVA_API_URL, {
             method: "POST",
@@ -34,9 +38,15 @@ serve(async (req) => {
                 "X-OCR-SECRET": CLOVA_SECRET_KEY,
             },
             body: JSON.stringify({
-                images,
-                requestId,
-                timestamp: timestamp || Date.now(),
+                images: [
+                    {
+                        format: imageFormat || "jpg",
+                        name: "receipt",
+                        data: imageBase64,
+                    }
+                ],
+                requestId: finalRequestId,
+                timestamp: finalTimestamp,
                 version: version || "V2",
             }),
         });

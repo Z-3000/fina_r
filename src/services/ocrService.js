@@ -1,187 +1,131 @@
 /**
- * Tesseract.js OCR 서비스
- * - 로컬에서 동작 (API 키 불필요)
- * - 한국어 + 영어 인식
+ * OCR 서비스
+ * - 네이버 CLOVA OCR (Supabase Edge Function 경유)
+ * - GPT-4o-mini를 사용한 스마트 파싱 (Edge Function에서 처리)
  */
 
-import Tesseract from 'tesseract.js';
+import { supabase } from '../lib/supabase';
+import { OcrEngine } from './ocr/core/OcrEngine';
 
-// 카테고리 키워드 매핑
-const CATEGORY_KEYWORDS = {
-  '식비': ['카페', '커피', '스타벅스', '이디야', '투썸', '빽다방', '메가커피', '식당', '음식', '치킨', '피자', '햄버거', '맥도날드', 'KFC', '버거킹', '롯데리아', '배달', '요기요', '배민', '쿠팡이츠', '반찬', '김밥', '떡볶이', '분식', '밥', '국', '찌개', '고기', '삼겹살', '족발', '보쌈'],
-  '편의점': ['CU', 'GS25', 'GS편의점', '세븐일레븐', '7-ELEVEN', '이마트24', '미니스톱', '편의점'],
-  '마트/식료품': ['이마트', '홈플러스', '롯데마트', '코스트코', '트레이더스', '하나로마트', '농협', '마트', '슈퍼', '식자재'],
-  '생활용품': ['다이소', '올리브영', '롭스', '시코르', '드럭스토어', '약국'],
-  '교통': ['주유소', 'SK에너지', 'GS칼텍스', 'S-OIL', '현대오일', '주유', '택시', '카카오T', '버스', '지하철', '교통', '톨게이트', '하이패스', '주차'],
-  '문화/여가': ['CGV', '롯데시네마', '메가박스', '영화', '노래방', '볼링', 'PC방', '게임', '넷플릭스'],
-  '도서/교육': ['교보문고', '영풍문고', '알라딘', '예스24', '서점', '학원', '교육'],
-  '의료': ['병원', '의원', '클리닉', '약국', '치과', '안과', '피부과', '정형외과', '내과', '소아과'],
-  '쇼핑': ['백화점', '롯데백화점', '신세계', '현대백화점', '아울렛', '쇼핑몰', '무신사', '쿠팡'],
+/**
+ * 이미지를 Base64로 변환
+ */
+const imageToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 };
 
 /**
- * Tesseract.js로 이미지에서 텍스트 추출
+ * 이미지 포맷 추출
  */
-export const recognizeText = async (imageFile, onProgress) => {
+const getImageFormat = (file) => {
+  const type = file.type.toLowerCase();
+  if (type.includes('png')) return 'png';
+  if (type.includes('gif')) return 'gif';
+  if (type.includes('bmp')) return 'bmp';
+  if (type.includes('tiff')) return 'tiff';
+  return 'jpg';
+};
+
+/**
+ * CLOVA OCR로 영수증 인식 (Supabase Edge Function 경유)
+ * Edge Function에서 GPT 파싱을 시도하고, 실패 시 raw 데이터 반환
+ */
+export const processWithClovaOcr = async (imageFile, onProgress) => {
   try {
     onProgress?.(10);
 
-    const result = await Tesseract.recognize(
-      imageFile,
-      'kor+eng', // 한국어 + 영어
-      {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            const progress = Math.round(10 + m.progress * 80);
-            onProgress?.(progress);
-          }
-        },
-      }
-    );
+    const imageBase64 = await imageToBase64(imageFile);
+    const imageFormat = getImageFormat(imageFile);
+
+    onProgress?.(30);
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\s/g, '');
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.replace(/\s/g, '');
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token || supabaseAnonKey;
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/clova-ocr`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': supabaseAnonKey,
+      },
+      body: JSON.stringify({
+        imageBase64,
+        imageFormat,
+      }),
+    });
+
+    onProgress?.(60);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('CLOVA OCR Edge Function 오류:', response.status, errorText);
+      throw new Error(`Edge Function 오류: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    onProgress?.(80);
+
+    // Edge Function에서 GPT로 파싱된 데이터 (우선순위 1)
+    if (data.success && data.parsed && data.data) {
+      console.log('[OCR] GPT 파싱 결과 수신');
+      onProgress?.(100);
+      return data.data;
+    }
+
+    // 레거시 호환성: 이미 파싱된 데이터
+    if (data.success && data.data) {
+      onProgress?.(100);
+      return {
+        ...data.data,
+        source: 'clova-legacy',
+      };
+    }
+
+    // Raw CLOVA 응답 처리 (GPT 실패 또는 API 키 없음)
+    if (!data.images || !data.images[0]) {
+      console.error('Invalid OCR Response:', data);
+      throw new Error(`OCR 응답 형식이 올바르지 않습니다.`);
+    }
+
+    const ocrImage = data.images[0];
+    if (ocrImage.inferResult === 'FAILURE') {
+      throw new Error('이미지 인식에 실패했습니다.');
+    }
+
+    console.log('[OCR] Raw CLOVA 데이터 → 자체 엔진으로 파싱');
+
+    // 자체 파싱 엔진 사용 (폴백)
+    const engine = new OcrEngine();
+    const result = engine.process(ocrImage);
 
     onProgress?.(100);
 
-    return {
-      text: result.data.text,
-      confidence: result.data.confidence,
-      words: result.data.words || [],
-      lines: result.data.lines || [],
-    };
+    return result;
+
   } catch (error) {
-    console.error('Tesseract OCR 오류:', error);
-    throw new Error('텍스트 인식에 실패했습니다. 다시 시도해주세요.');
+    console.error('CLOVA OCR 처리 실패:', error);
+    throw error;
   }
 };
 
 /**
- * OCR 결과에서 영수증 정보 파싱
- */
-export const parseReceiptFromText = (ocrResult) => {
-  const result = {
-    merchant: null,
-    amount: null,
-    date: null,
-    category: '기타',
-    items: [],
-    rawText: ocrResult.text || '',
-    confidence: ocrResult.confidence || 0,
-  };
-
-  const text = ocrResult.text || '';
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-  // 1. 상호명 추출 (첫 몇 줄에서 찾기)
-  for (const line of lines.slice(0, 5)) {
-    // 숫자만 있는 줄 제외
-    if (!/^[\d\s\-.:,]+$/.test(line) && line.length >= 2 && line.length <= 30) {
-      // 영수증, 카드전표 등 제외
-      if (!/(영수증|카드전표|거래명세|합계|총액|부가세|현금|카드)/i.test(line)) {
-        result.merchant = line;
-        break;
-      }
-    }
-  }
-
-  // 2. 금액 추출 (가장 큰 금액 = 총액으로 추정)
-  const amounts = [];
-  const amountPatterns = [
-    /합\s*계\s*[:\s]*([0-9,]+)/i,
-    /총\s*(금액|액)\s*[:\s]*([0-9,]+)/i,
-    /결제\s*(금액)?\s*[:\s]*([0-9,]+)/i,
-    /([0-9]{1,3}(?:,?[0-9]{3})+)\s*원?/g,
-  ];
-
-  // 합계/총액 패턴 먼저 시도
-  for (const pattern of amountPatterns.slice(0, 3)) {
-    const match = text.match(pattern);
-    if (match) {
-      const numStr = (match[2] || match[1]).replace(/,/g, '');
-      const num = parseInt(numStr, 10);
-      if (num >= 100 && num < 100000000) {
-        result.amount = num;
-        break;
-      }
-    }
-  }
-
-  // 합계 패턴 없으면 모든 금액에서 최대값
-  if (!result.amount) {
-    const allMatches = text.match(/([0-9]{1,3}(?:,?[0-9]{3})+)/g) || [];
-    for (const m of allMatches) {
-      const num = parseInt(m.replace(/,/g, ''), 10);
-      if (num >= 100 && num < 100000000) {
-        amounts.push(num);
-      }
-    }
-    if (amounts.length > 0) {
-      result.amount = Math.max(...amounts);
-    }
-  }
-
-  // 3. 날짜 추출
-  const datePatterns = [
-    /(\d{4})[.\-\/년]\s*(\d{1,2})[.\-\/월]\s*(\d{1,2})/,
-    /(\d{2})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/,
-  ];
-
-  for (const pattern of datePatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      let year = parseInt(match[1], 10);
-      const month = parseInt(match[2], 10);
-      const day = parseInt(match[3], 10);
-
-      // 2자리 연도 처리
-      if (year < 100) {
-        year = 2000 + year;
-      }
-
-      if (year >= 2020 && year <= 2030 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-        result.date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        break;
-      }
-    }
-  }
-
-  // 날짜가 없으면 오늘 날짜
-  if (!result.date) {
-    result.date = new Date().toISOString().split('T')[0];
-  }
-
-  // 4. 카테고리 추론
-  const searchText = `${result.merchant || ''} ${result.rawText}`.toLowerCase();
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    for (const keyword of keywords) {
-      if (searchText.includes(keyword.toLowerCase())) {
-        result.category = category;
-        break;
-      }
-    }
-    if (result.category !== '기타') break;
-  }
-
-  return result;
-};
-
-/**
- * 이미지 파일에서 영수증 정보 추출 (통합 함수)
+ * 이미지 파일에서 영수증 정보 추출
  */
 export const processReceiptImage = async (imageFile, onProgress) => {
-  try {
-    // Tesseract OCR 호출
-    const ocrResult = await recognizeText(imageFile, onProgress);
-
-    // 결과 파싱
-    const parsedData = parseReceiptFromText(ocrResult);
-
-    return {
-      ...parsedData,
-      ocrResult, // 디버깅용 원본 결과
-    };
-  } catch (error) {
-    console.error('영수증 처리 실패:', error);
-    throw new Error('영수증 인식에 실패했습니다. 다시 시도해주세요.');
-  }
+  return await processWithClovaOcr(imageFile, onProgress);
 };
 
 /**
@@ -192,7 +136,7 @@ export const createImagePreview = (file) => {
 };
 
 /**
- * 이미지 압축 (큰 이미지 처리용)
+ * 이미지 압축
  */
 export const compressImage = async (file, maxWidth = 1200) => {
   return new Promise((resolve) => {
@@ -230,9 +174,8 @@ export const compressImage = async (file, maxWidth = 1200) => {
 };
 
 export default {
-  recognizeText,
-  parseReceiptFromText,
   processReceiptImage,
+  processWithClovaOcr,
   createImagePreview,
   compressImage,
 };
