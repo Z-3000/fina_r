@@ -30,7 +30,7 @@ import {
   bankDummyTransactionsAPI,
 } from './services/supabaseApi';
 import { processReceiptImage, compressImage } from './services/ocrService';
-import { calculateIndividualTax } from './services/taxCalculator';
+import { calculateIndividualTax, calculateBusinessTax } from './services/taxCalculator';
 import {
   generateMonthlyExpenseReport,
   generateYearEndTaxReport,
@@ -57,6 +57,20 @@ const ReceiptFinancePlatform = () => {
   const [showPDFReportModal, setShowPDFReportModal] = useState(false);
   const [showTaxSimulatorModal, setShowTaxSimulatorModal] = useState(false);
   const [showAIInsightModal, setShowAIInsightModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false); // 설정 모달
+  
+  // 세금 계산용 기본 정보
+  const [taxBasicInfo, setTaxBasicInfo] = useState({
+    // 개인용
+    annualIncome: 50000000,      // 연봉
+    dependents: 0,               // 부양가족 수
+    hasSpouse: false,            // 배우자 유무
+    // 소상공인용
+    expectedRevenue: 100000000,  // 예상 연매출
+    expectedExpenses: 60000000,  // 예상 경비
+    isSimplifiedTax: false,      // 간이과세자 여부
+  });
+  
   const [selectedReward, setSelectedReward] = useState(null);
   const [detailsModalType, setDetailsModalType] = useState('');
   const [selectedExpert, setSelectedExpert] = useState(null);
@@ -139,9 +153,41 @@ const ReceiptFinancePlatform = () => {
         });
         setIsPremium(profile.is_premium || false);
         setUserType(profile.user_type || 'individual');
+        // taxBasicInfo 로드
+        if (profile.tax_basic_info) {
+          setTaxBasicInfo({
+            annualIncome: profile.tax_basic_info.annualIncome || 50000000,
+            dependents: profile.tax_basic_info.dependents || 0,
+            hasSpouse: profile.tax_basic_info.hasSpouse || false,
+            expectedRevenue: profile.tax_basic_info.expectedRevenue || 100000000,
+            expectedExpenses: profile.tax_basic_info.expectedExpenses || 60000000,
+            isSimplifiedTax: profile.tax_basic_info.isSimplifiedTax || false,
+          });
+        }
       }
     } catch (error) {
       console.error('프로필 로드 실패:', error);
+    }
+  };
+
+  // 유저타입 변경 핸들러 (설정에서 사용) - 즉시 상태만 변경
+  const handleUserTypeChange = (newType) => {
+    setUserType(newType);
+  };
+
+  // 설정 저장 핸들러 (유저타입 + taxBasicInfo 모두 저장)
+  const handleSaveSettings = async () => {
+    try {
+      if (currentUser) {
+        await authAPI.updateProfile(currentUser.id, {
+          user_type: userType,
+          tax_basic_info: taxBasicInfo,
+        });
+        setShowSettingsModal(false);
+        console.log('✅ 설정 저장 완료:', { userType, taxBasicInfo });
+      }
+    } catch (error) {
+      console.error('설정 저장 실패:', error);
     }
   };
 
@@ -455,24 +501,157 @@ const ReceiptFinancePlatform = () => {
     }
   }, [currentUser, loadDataFromAPI]);
 
-  // Calculate Tax Health Score
+  // Supabase Realtime 구독 - 양방향 데이터 동기화
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const uid = currentUser.id;
+    console.log('🔔 Realtime 구독 시작 - User ID:', uid);
+
+    // receipts 테이블 구독
+    const receiptsChannel = supabase
+      .channel('receipts-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'receipts', filter: `user_id=eq.${uid}` },
+        (payload) => {
+          console.log('📨 receipts 변경 감지:', payload.eventType, payload);
+          if (payload.eventType === 'INSERT') {
+            setReceipts(prev => [payload.new, ...prev.filter(r => r.id !== payload.new.id)]);
+          } else if (payload.eventType === 'UPDATE') {
+            setReceipts(prev => prev.map(r => r.id === payload.new.id ? payload.new : r));
+          } else if (payload.eventType === 'DELETE') {
+            setReceipts(prev => prev.filter(r => r.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    // budgets 테이블 구독
+    const budgetsChannel = supabase
+      .channel('budgets-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'budgets', filter: `user_id=eq.${uid}` },
+        (payload) => {
+          console.log('📨 budgets 변경 감지:', payload.eventType, payload);
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            setBudgets(prev => ({ ...prev, [payload.new.category]: payload.new.amount }));
+          } else if (payload.eventType === 'DELETE') {
+            setBudgets(prev => {
+              const updated = { ...prev };
+              delete updated[payload.old.category];
+              return updated;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // profiles 테이블 구독 (유저타입, 세금정보 등)
+    const profilesChannel = supabase
+      .channel('profiles-changes')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${uid}` },
+        (payload) => {
+          console.log('📨 profiles 변경 감지:', payload);
+          const profile = payload.new;
+          if (profile.user_type) setUserType(profile.user_type);
+          if (profile.tax_basic_info) {
+            setTaxBasicInfo({
+              annualIncome: profile.tax_basic_info.annualIncome || 50000000,
+              dependents: profile.tax_basic_info.dependents || 0,
+              hasSpouse: profile.tax_basic_info.hasSpouse || false,
+              expectedRevenue: profile.tax_basic_info.expectedRevenue || 100000000,
+              expectedExpenses: profile.tax_basic_info.expectedExpenses || 60000000,
+              isSimplifiedTax: profile.tax_basic_info.isSimplifiedTax || false,
+            });
+          }
+          if (profile.is_premium !== undefined) setIsPremium(profile.is_premium);
+        }
+      )
+      .subscribe();
+
+    // linked_accounts 테이블 구독
+    const accountsChannel = supabase
+      .channel('accounts-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'linked_accounts', filter: `user_id=eq.${uid}` },
+        (payload) => {
+          console.log('📨 linked_accounts 변경 감지:', payload.eventType, payload);
+          if (payload.eventType === 'INSERT') {
+            setLinkedAccounts(prev => [...prev, payload.new]);
+          } else if (payload.eventType === 'UPDATE') {
+            setLinkedAccounts(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
+          } else if (payload.eventType === 'DELETE') {
+            setLinkedAccounts(prev => prev.filter(a => a.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup
+    return () => {
+      console.log('🔕 Realtime 구독 해제');
+      supabase.removeChannel(receiptsChannel);
+      supabase.removeChannel(budgetsChannel);
+      supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(accountsChannel);
+    };
+  }, [currentUser?.id]);
+
+  // Calculate Tax Health Score - 유저타입별 다른 기준 적용
   const calculateTaxHealthScore = () => {
     let score = 100;
 
-    // 공제 활용도
-    const deductionUsage = Object.values(deductionTracker).reduce((sum, item) => {
-      return sum + (item.current / item.maxDeduction);
-    }, 0) / Object.keys(deductionTracker).length;
-    score -= (1 - deductionUsage) * 20;
+    if (userType === 'individual') {
+      // 개인: 공제 활용도 중심
+      
+      // 1. 공제 활용도 (최대 -25점)
+      const deductionUsage = Object.keys(deductionTracker).length > 0 
+        ? Object.values(deductionTracker).reduce((sum, item) => {
+            return sum + (item.current / item.maxDeduction);
+          }, 0) / Object.keys(deductionTracker).length
+        : 0;
+      score -= (1 - deductionUsage) * 25;
 
-    // 증빙 완성도
-    const totalDocs = Object.values(deductionTracker).reduce((sum, item) => sum + item.documents, 0);
-    if (totalDocs < 30) score -= 10;
+      // 2. 증빙 완성도 (최대 -15점)
+      const totalDocs = Object.values(deductionTracker).reduce((sum, item) => sum + item.documents, 0);
+      if (totalDocs < 10) score -= 15;
+      else if (totalDocs < 20) score -= 10;
+      else if (totalDocs < 30) score -= 5;
 
-    // 세금 납부 이력
-    score -= 5; // 예시
+      // 3. 연말정산 준비 상태 (최대 -10점)
+      const deductionCategories = Object.keys(deductionTracker).length;
+      if (deductionCategories < 3) score -= 10;
+      else if (deductionCategories < 5) score -= 5;
 
-    return Math.round(score);
+    } else {
+      // 소상공인: 경비처리 + 부가세 관리 중심
+      
+      // 1. 경비 기록 완성도 (최대 -25점)
+      const monthlyReceiptCount = receipts.filter(r => {
+        const receiptDate = new Date(r.date);
+        const now = new Date();
+        return receiptDate.getMonth() === now.getMonth() && receiptDate.getFullYear() === now.getFullYear();
+      }).length;
+      if (monthlyReceiptCount < 10) score -= 25;
+      else if (monthlyReceiptCount < 30) score -= 15;
+      else if (monthlyReceiptCount < 50) score -= 5;
+
+      // 2. 자동 연동 활용도 (최대 -15점)
+      const linkedCount = linkedAccounts.length;
+      if (linkedCount === 0) score -= 15;
+      else if (linkedCount < 2) score -= 10;
+      else if (linkedCount < 3) score -= 5;
+
+      // 3. 부가세 신고 대비 (최대 -10점)
+      const hasVatReady = receipts.filter(r => r.tax > 0).length > 0;
+      if (!hasVatReady) score -= 10;
+    }
+
+    // 공통: 연속 출석 보너스
+    if (userProfile.streak >= 7) score = Math.min(100, score + 5);
+    
+    return Math.max(0, Math.round(score));
   };
 
   // Calculate statistics
@@ -502,6 +681,29 @@ const ReceiptFinancePlatform = () => {
       percentage: ((categorySpending[category] || 0) / budget * 100).toFixed(1),
     }));
 
+    // 실제 세금 계산 (taxCalculator 사용)
+    let taxEstimate = 0;
+    try {
+      if (userType === 'individual') {
+        const taxResult = calculateIndividualTax({
+          annualIncome: taxBasicInfo.annualIncome,
+          dependents: taxBasicInfo.dependents,
+          hasSpouse: taxBasicInfo.hasSpouse,
+        });
+        taxEstimate = taxResult.totalTax || 0;
+      } else {
+        const taxResult = calculateBusinessTax({
+          revenue: taxBasicInfo.expectedRevenue,
+          expenses: taxBasicInfo.expectedExpenses,
+          dependents: taxBasicInfo.dependents || 0,
+          hasSpouse: taxBasicInfo.hasSpouse || false,
+        });
+        taxEstimate = taxResult.totalTax || 0;
+      }
+    } catch (e) {
+      taxEstimate = 0;
+    }
+
     return {
       totalSpent,
       totalTax,
@@ -512,6 +714,7 @@ const ReceiptFinancePlatform = () => {
       receiptCount: monthlyReceipts.length + monthlyAuto.length,
       manualCount: monthlyReceipts.length,
       autoCount: monthlyAuto.length,
+      taxEstimate,
     };
   }, [receipts, autoTransactions, budgets]);
 
@@ -1097,6 +1300,19 @@ const ReceiptFinancePlatform = () => {
               <div className="flex items-center gap-2 mb-1">
                 <h2 className="text-2xl font-bold">{userProfile.name}</h2>
                 {isPremium && <span className="bg-yellow-400 text-purple-900 px-2 py-0.5 rounded-full text-xs font-bold">PRO</span>}
+                <span className={"px-2 py-0.5 rounded-full text-xs font-bold " + (userType === 'individual' ? 'bg-blue-400 text-blue-900' : 'bg-purple-400 text-purple-900')}>
+                  {userType === 'individual' ? '개인' : '사업자'}
+                </span>
+                <button 
+                  onClick={() => setShowSettingsModal(true)}
+                  className="ml-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition"
+                  title="설정"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
               </div>
               <div className="text-sm opacity-90 mb-2">{userProfile.points.toLocaleString()} 포인트</div>
               <div className="flex items-center gap-2">
@@ -1347,12 +1563,156 @@ const ReceiptFinancePlatform = () => {
         )}
       </div>
 
+      {/* 유저타입별 세금 핵심 정보 */}
+      <div className={"rounded-xl p-6 shadow-sm border " + (userType === 'individual' ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200' : 'bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200')}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            {userType === 'individual' ? (
+              <>
+                <User className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-lg text-blue-900">개인 연말정산 현황</h3>
+              </>
+            ) : (
+              <>
+                <Briefcase className="w-5 h-5 text-purple-600" />
+                <h3 className="font-bold text-lg text-purple-900">사업자 세금 현황</h3>
+              </>
+            )}
+          </div>
+          <button
+            onClick={() => setShowTaxSimulatorModal(true)}
+            className={"text-sm px-3 py-1 rounded-lg transition flex items-center gap-1 " + (userType === 'individual' ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-purple-500 text-white hover:bg-purple-600')}
+          >
+            <Calculator className="w-4 h-4" />
+            {userType === 'individual' ? '연말정산 시뮬레이터' : '종합소득세 계산'}
+          </button>
+        </div>
+
+        {userType === 'individual' ? (
+          /* 개인 사용자 - 연말정산 정보 */
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="bg-white/70 rounded-lg p-4">
+              <div className="text-sm text-blue-700 mb-1">예상 환급액</div>
+              <div className="text-2xl font-bold text-blue-900">₩{((stats.taxEstimate || 0) * 0.15).toLocaleString()}</div>
+              <div className="text-xs text-blue-600 mt-1">공제 활용 시 예상</div>
+            </div>
+            <div className="bg-white/70 rounded-lg p-4">
+              <div className="text-sm text-blue-700 mb-1">공제 가능 총액</div>
+              <div className="text-2xl font-bold text-blue-900">₩{Object.values(deductionTracker).reduce((sum, d) => sum + d.current, 0).toLocaleString()}</div>
+              <div className="text-xs text-blue-600 mt-1">{Object.keys(deductionTracker).length}개 항목</div>
+            </div>
+            <div className="bg-white/70 rounded-lg p-4">
+              <div className="text-sm text-blue-700 mb-1">신고 마감까지</div>
+              <div className="text-2xl font-bold text-blue-900">D-{Math.max(0, Math.floor((new Date('2026-02-28') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
+              <div className="text-xs text-blue-600 mt-1">연말정산 마감</div>
+            </div>
+          </div>
+        ) : (
+          /* 소상공인 - 사업자 세금 정보 */
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="bg-white/70 rounded-lg p-4">
+              <div className="text-sm text-purple-700 mb-1">예상 종합소득세</div>
+              <div className="text-2xl font-bold text-purple-900">₩{(stats.taxEstimate || 0).toLocaleString()}</div>
+              <div className="text-xs text-purple-600 mt-1">올해 예상 납부액</div>
+            </div>
+            <div className="bg-white/70 rounded-lg p-4">
+              <div className="text-sm text-purple-700 mb-1">이번 달 매출</div>
+              <div className="text-2xl font-bold text-purple-900">₩{stats.totalSpent.toLocaleString()}</div>
+              <div className="text-xs text-purple-600 mt-1">지출 기준</div>
+            </div>
+            <div className="bg-white/70 rounded-lg p-4">
+              <div className="text-sm text-purple-700 mb-1">부가세 신고까지</div>
+              <div className="text-2xl font-bold text-purple-900">D-{Math.max(0, Math.floor((new Date('2026-01-25') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
+              <div className="text-xs text-purple-600 mt-1">2기 확정신고</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Tax Health Score 상세 분석 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border">
+        <div className="flex items-center gap-2 mb-4">
+          <Heart className="w-6 h-6 text-red-500" />
+          <h3 className="font-bold text-lg">Tax Health Score™ 상세</h3>
+        </div>
+
+        {/* 카테고리별 점수 */}
+        <div className="grid md:grid-cols-4 gap-4 mb-6">
+          {[
+            { name: '세금 리스크', score: Math.min(100, taxHealthScore + 7), status: '양호', color: 'green', icon: AlertTriangle },
+            { name: '증빙 완성도', score: Math.max(50, taxHealthScore - 13), status: taxHealthScore >= 70 ? '양호' : '주의', color: taxHealthScore >= 70 ? 'blue' : 'orange', icon: FileText },
+            { name: '환급 가능성', score: Math.min(100, taxHealthScore + 4), status: '우수', color: 'blue', icon: TrendingUp },
+            { name: '절세 여력', score: Math.max(50, taxHealthScore - 8), status: '보통', color: 'purple', icon: Target },
+          ].map((cat, idx) => {
+            const Icon = cat.icon;
+            return (
+              <div key={idx} className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`w-8 h-8 bg-${cat.color}-100 rounded-lg flex items-center justify-center`}>
+                    <Icon className={`w-4 h-4 text-${cat.color}-600`} />
+                  </div>
+                  <span className="font-semibold text-sm">{cat.name}</span>
+                </div>
+                <div className="flex items-end justify-between">
+                  <span className={`text-2xl font-bold text-${cat.color}-600`}>{cat.score}</span>
+                  <span className={`text-xs px-2 py-1 bg-${cat.color}-100 text-${cat.color}-700 rounded`}>{cat.status}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                  <div className={`h-1.5 rounded-full bg-${cat.color}-500`} style={{ width: `${cat.score}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 점수 변화 추이 */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-700 mb-2">최근 6개월 점수 변화</div>
+          <div className="flex items-end justify-between h-32 gap-2">
+            {[
+              { month: '6월', score: Math.max(50, taxHealthScore - 13) },
+              { month: '7월', score: Math.max(55, taxHealthScore - 10) },
+              { month: '8월', score: Math.max(60, taxHealthScore - 6) },
+              { month: '9월', score: Math.max(65, taxHealthScore - 3) },
+              { month: '10월', score: Math.max(70, taxHealthScore - 1) },
+              { month: '11월', score: taxHealthScore },
+            ].map((item, idx) => (
+              <div key={idx} className="flex-1 flex flex-col items-center gap-1">
+                <div
+                  className="w-full bg-gradient-to-t from-blue-500 to-purple-500 rounded-t transition-all hover:from-blue-600 hover:to-purple-600"
+                  style={{ height: `${(item.score / 100) * 100}%` }}
+                />
+                <div className="text-xs font-semibold">{item.score}</div>
+                <div className="text-xs text-gray-500">{item.month}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 개선 제안 */}
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <Lightbulb className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold text-orange-900 mb-1">맞춤형 개선 제안</div>
+              <p className="text-sm text-orange-700">
+                {taxHealthScore < 70
+                  ? '의료비 증빙을 추가하면 점수를 +5점 올릴 수 있습니다.'
+                  : taxHealthScore < 85
+                    ? '신용카드 사용 비율을 25% 이상으로 맞추면 추가 공제가 가능합니다.'
+                    : '현재 세금 관리 상태가 매우 좋습니다! 계속 유지하세요.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Deduction Tracker */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Target className="w-5 h-5 text-purple-500" />
-            <h3 className="font-bold text-lg">공제 항목 실시간 추적</h3>
+            <h3 className="font-bold text-lg">{userType === 'individual' ? '공제 항목 실시간 추적' : '필요경비 추적'}</h3>
           </div>
           <button
             onClick={() => setShowDocSpaceModal(true)}
@@ -1714,6 +2074,82 @@ const ReceiptFinancePlatform = () => {
           </div>
         </div>
       </div>
+
+      {/* TOP 10 공제항목 체크리스트 - 개인만 표시 */}
+      {userType === 'individual' && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+              <h3 className="font-bold text-lg">TOP 10 공제항목 체크</h3>
+            </div>
+            <span className="text-sm text-gray-500">{checkedDeductions.length}/10 확인</span>
+          </div>
+
+          {/* 진행 상태 바 */}
+          <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg p-4 text-white mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm">진행률</span>
+              <span className="font-bold">{deductionCompletionRate.toFixed(0)}%</span>
+            </div>
+            <div className="w-full bg-white/30 rounded-full h-2">
+              <div
+                className="h-2 bg-white rounded-full transition-all"
+                style={{ width: `${deductionCompletionRate}%` }}
+              />
+            </div>
+            <div className="mt-2 text-sm">
+              예상 절세액: <span className="font-bold">{(totalDeductionSavings / 10000).toFixed(0)}만원</span>
+            </div>
+          </div>
+
+          {/* 체크리스트 */}
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {deductionItems.map((item, idx) => (
+              <div
+                key={item.id}
+                onClick={() => handleDeductionCheck(item.id)}
+                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                  checkedDeductions.includes(item.id)
+                    ? 'bg-green-50 border-2 border-green-300'
+                    : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                }`}
+              >
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                  checkedDeductions.includes(item.id)
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-300'
+                }`}>
+                  {checkedDeductions.includes(item.id) ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <span className="text-xs font-bold text-white">{idx + 1}</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-sm">{item.title}</div>
+                  <div className="text-xs text-gray-500">{item.tips}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-green-600">
+                    {(item.estimatedSaving / 10000).toFixed(0)}만원
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {deductionCompletionRate === 100 && (
+            <div className="mt-4 p-4 bg-green-100 rounded-lg text-center">
+              <PartyPopper className="w-8 h-8 text-green-600 mx-auto mb-2" />
+              <div className="font-bold text-green-800">모든 항목 확인 완료!</div>
+              <div className="text-sm text-green-700">
+                총 예상 절세액: {(totalDeductionSavings / 10000).toFixed(0)}만원
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -2294,6 +2730,25 @@ const ReceiptFinancePlatform = () => {
   );
 
   // Tax Prediction View
+  // 연말정산 계산기 슬라이더 state
+  const [calcIncome, setCalcIncome] = useState(taxBasicInfo.annualIncome);
+  const [calcCreditCard, setCalcCreditCard] = useState(Math.floor(taxBasicInfo.annualIncome * 0.3));
+  const [calcCashReceipt, setCalcCashReceipt] = useState(3000000);
+  const [calcMedical, setCalcMedical] = useState(2000000);
+  const [calcEducation, setCalcEducation] = useState(1000000);
+
+  // 간단한 연말정산 계산
+  const calculateSimpleRefund = () => {
+    const totalDeduction = calcCreditCard * 0.15 + calcCashReceipt * 0.3 + calcMedical * 0.15 + calcEducation * 0.15;
+    const taxBase = Math.max(0, calcIncome - totalDeduction - 15000000);
+    const estimatedTax = taxBase * 0.15;
+    const withheldTax = calcIncome * 0.08;
+    return Math.max(0, withheldTax - estimatedTax);
+  };
+
+  const calcRefund = calculateSimpleRefund();
+  const creditCardRatio = calcIncome > 0 ? ((calcCreditCard / calcIncome) * 100).toFixed(1) : 0;
+
   const TaxPredictionView = () => {
     const taxData = userType === 'individual' ? individualTaxData : businessTaxData;
     const totalPredictedTax = taxData.slice(5).reduce((sum, d) => sum + d.predicted, 0);
@@ -2301,6 +2756,171 @@ const ReceiptFinancePlatform = () => {
 
     return (
       <div className="space-y-6">
+        {/* 연말정산 계산기 (슬라이더 기반) - 개인만 표시 */}
+        {userType === 'individual' && (
+          <div className="bg-white rounded-xl p-6 shadow-sm border">
+            <div className="flex items-center gap-2 mb-6">
+              <Calculator className="w-6 h-6 text-blue-600" />
+              <h3 className="font-bold text-xl">연말정산 계산기</h3>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* 입력 섹션 */}
+              <div className="space-y-6">
+                {/* 총급여 */}
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <label className="font-semibold text-gray-700">총급여액</label>
+                    <span className="text-blue-600 font-bold">{calcIncome.toLocaleString()}원</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={20000000}
+                    max={150000000}
+                    step={1000000}
+                    value={calcIncome}
+                    onChange={(e) => setCalcIncome(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>2천만원</span>
+                    <span>1억5천만원</span>
+                  </div>
+                </div>
+
+                {/* 신용카드 */}
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <label className="font-semibold text-gray-700">신용카드 사용액</label>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">{creditCardRatio}%</span>
+                      <span className="text-blue-600 font-bold">{calcCreditCard.toLocaleString()}원</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={calcIncome}
+                    step={100000}
+                    value={calcCreditCard}
+                    onChange={(e) => setCalcCreditCard(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  />
+                </div>
+
+                {/* 현금영수증 */}
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <label className="font-semibold text-gray-700">현금영수증</label>
+                    <span className="text-blue-600 font-bold">{calcCashReceipt.toLocaleString()}원</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={20000000}
+                    step={100000}
+                    value={calcCashReceipt}
+                    onChange={(e) => setCalcCashReceipt(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                  />
+                </div>
+
+                {/* 의료비 */}
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <label className="font-semibold text-gray-700">의료비</label>
+                    <span className="text-blue-600 font-bold">{calcMedical.toLocaleString()}원</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={10000000}
+                    step={100000}
+                    value={calcMedical}
+                    onChange={(e) => setCalcMedical(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  />
+                </div>
+
+                {/* 교육비 */}
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <label className="font-semibold text-gray-700">교육비</label>
+                    <span className="text-blue-600 font-bold">{calcEducation.toLocaleString()}원</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={10000000}
+                    step={100000}
+                    value={calcEducation}
+                    onChange={(e) => setCalcEducation(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  />
+                </div>
+              </div>
+
+              {/* 결과 섹션 */}
+              <div className="space-y-4">
+                {/* 예상 환급액 */}
+                <div className="bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl p-6 text-white">
+                  <div className="text-sm opacity-90 mb-2">예상 환급액</div>
+                  <div className="text-4xl font-bold mb-2">{calcRefund.toLocaleString()}원</div>
+                  <div className="flex items-center gap-1 text-sm opacity-90">
+                    <TrendingUp className="w-4 h-4" />
+                    <span>작년 대비 예상 증가율 +12%</span>
+                  </div>
+                </div>
+
+                {/* 공제 항목 요약 */}
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <div className="font-semibold text-gray-800 mb-3">공제 항목 요약</div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-gray-600">신용카드 공제</span>
+                    <span className="font-semibold">{Math.floor(calcCreditCard * 0.15).toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-gray-600">현금영수증 공제</span>
+                    <span className="font-semibold">{Math.floor(calcCashReceipt * 0.3).toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-gray-600">의료비 공제</span>
+                    <span className="font-semibold">{Math.floor(calcMedical * 0.15).toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-gray-600">교육비 공제</span>
+                    <span className="font-semibold">{Math.floor(calcEducation * 0.15).toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between py-3 bg-blue-50 rounded-lg px-3 mt-2">
+                    <span className="font-bold text-blue-900">총 공제액</span>
+                    <span className="font-bold text-blue-600">
+                      {Math.floor(calcCreditCard * 0.15 + calcCashReceipt * 0.3 + calcMedical * 0.15 + calcEducation * 0.15).toLocaleString()}원
+                    </span>
+                  </div>
+                </div>
+
+                {/* 절세 팁 */}
+                {calcCreditCard < calcIncome * 0.25 && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-semibold text-orange-900 mb-1">절세 팁</div>
+                        <p className="text-sm text-orange-700">
+                          신용카드 사용액을 총급여의 25% 이상으로 늘리면 추가 공제를 받을 수 있습니다.
+                        </p>
+                        <span className="inline-block mt-2 text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded">
+                          추가 절세 가능액: {Math.floor((calcIncome * 0.25 - calcCreditCard) * 0.15).toLocaleString()}원
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* User Type Selector */}
         <div className="bg-white rounded-xl p-6 shadow-sm border">
           <h3 className="font-bold text-lg mb-4">사용자 유형 선택</h3>
@@ -2494,6 +3114,279 @@ const ReceiptFinancePlatform = () => {
 
   const unlockedBadges = allBadges.filter(b => b.unlocked);
   const lockedBadges = allBadges.filter(b => !b.unlocked);
+
+  // TOP 10 공제항목 체크리스트 state
+  const [checkedDeductions, setCheckedDeductions] = useState([]);
+  const deductionItems = [
+    { id: 1, title: '신용카드 소득공제', estimatedSaving: 450000, tips: '현금영수증과 체크카드 함께 사용 시 공제율 UP' },
+    { id: 2, title: '의료비 세액공제', estimatedSaving: 350000, tips: '안경 구입비, 보청기도 공제 대상' },
+    { id: 3, title: '교육비 세액공제', estimatedSaving: 300000, tips: '교복 구입비도 공제 가능' },
+    { id: 4, title: '주택자금 공제', estimatedSaving: 400000, tips: '전세자금 대출 이자도 공제 가능' },
+    { id: 5, title: '연금저축 세액공제', estimatedSaving: 594000, tips: 'IRP 포함 시 연 700만원까지' },
+    { id: 6, title: '기부금 세액공제', estimatedSaving: 150000, tips: '이월공제 가능' },
+    { id: 7, title: '월세 세액공제', estimatedSaving: 960000, tips: '총급여 7천만원 이하 대상' },
+    { id: 8, title: '보험료 세액공제', estimatedSaving: 120000, tips: '보장성 보험료 연 100만원 한도' },
+    { id: 9, title: '개인연금저축 소득공제', estimatedSaving: 720000, tips: '연 1,800만원 한도 40% 공제' },
+    { id: 10, title: '청약저축 소득공제', estimatedSaving: 480000, tips: '무주택 세대주만 해당' },
+  ];
+
+  const handleDeductionCheck = (id) => {
+    setCheckedDeductions(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const deductionCompletionRate = (checkedDeductions.length / deductionItems.length) * 100;
+  const totalDeductionSavings = deductionItems
+    .filter(d => checkedDeductions.includes(d.id))
+    .reduce((sum, d) => sum + d.estimatedSaving, 0);
+
+  // Benefits (혜택 탐색) 데이터
+  const [benefitsCategory, setBenefitsCategory] = useState('all');
+  const benefitsData = [
+    {
+      id: 1,
+      category: 'tax',
+      title: '신용카드 소득공제',
+      amount: '최대 300만원',
+      provider: '국세청',
+      description: '총급여 25% 초과분 15~30% 공제',
+      eligibility: '근로소득자',
+      deadline: '연말정산 시 자동',
+      eligible: true,
+    },
+    {
+      id: 2,
+      category: 'tax',
+      title: '월세 세액공제',
+      amount: '최대 750만원',
+      provider: '국세청',
+      description: '무주택 세대주 월세 세액공제',
+      eligibility: '총급여 7천만원 이하',
+      deadline: '연말정산 시 신청',
+      eligible: userType === 'individual',
+    },
+    {
+      id: 3,
+      category: 'tax',
+      title: '연금저축 세액공제',
+      amount: '최대 66만원',
+      provider: '국세청',
+      description: '연금저축 납입액의 12~15% 공제',
+      eligibility: '총급여 5,500만원 이하 15%',
+      deadline: '연말정산 시 자동',
+      eligible: true,
+    },
+    {
+      id: 4,
+      category: 'housing',
+      title: '청년 전세자금 대출',
+      amount: '최대 1억원',
+      provider: '주택도시기금',
+      description: '연 1.8%~2.7% 저금리 전세자금',
+      eligibility: '만 19~34세 무주택자',
+      deadline: '상시 신청',
+      eligible: false,
+    },
+    {
+      id: 5,
+      category: 'housing',
+      title: '주택청약종합저축 소득공제',
+      amount: '최대 96만원',
+      provider: '국세청',
+      description: '납입액의 40% 소득공제',
+      eligibility: '무주택 세대주, 총급여 7천만원 이하',
+      deadline: '연말정산 시 자동',
+      eligible: userType === 'individual',
+    },
+    {
+      id: 6,
+      category: 'business',
+      title: '노란우산공제',
+      amount: '최대 500만원',
+      provider: '중소기업중앙회',
+      description: '납입액 100% 소득공제',
+      eligibility: '소기업·소상공인',
+      deadline: '상시 가입',
+      eligible: userType === 'business',
+    },
+    {
+      id: 7,
+      category: 'business',
+      title: '간이과세자 부가세 면제',
+      amount: '부가세 전액',
+      provider: '국세청',
+      description: '연매출 4,800만원 미만 면제',
+      eligibility: '간이과세자',
+      deadline: '자동 적용',
+      eligible: userType === 'business' && taxBasicInfo.isSimplifiedTax,
+    },
+    {
+      id: 8,
+      category: 'support',
+      title: '근로장려금',
+      amount: '최대 330만원',
+      provider: '국세청',
+      description: '저소득 근로자 지원금',
+      eligibility: '총급여 2,200만원 이하',
+      deadline: '5월 신청',
+      eligible: false,
+    },
+    {
+      id: 9,
+      category: 'support',
+      title: '자녀장려금',
+      amount: '최대 80만원/인',
+      provider: '국세청',
+      description: '18세 미만 자녀 양육 지원',
+      eligibility: '총급여 4,000만원 이하',
+      deadline: '5월 신청',
+      eligible: taxBasicInfo.dependents > 0,
+    },
+    {
+      id: 10,
+      category: 'financial',
+      title: 'ISA 계좌 비과세',
+      amount: '최대 200만원',
+      provider: '금융위원회',
+      description: '수익에 대한 비과세 혜택',
+      eligibility: '19세 이상 거주자',
+      deadline: '상시 가입',
+      eligible: true,
+    },
+  ];
+
+  const benefitsCategories = [
+    { id: 'all', label: '전체', icon: Gift },
+    { id: 'tax', label: '세금공제', icon: Calculator },
+    { id: 'housing', label: '주거', icon: Home },
+    { id: 'business', label: '사업자', icon: Briefcase },
+    { id: 'support', label: '지원금', icon: Heart },
+    { id: 'financial', label: '금융', icon: CreditCard },
+  ];
+
+  const filteredBenefits = benefitsCategory === 'all'
+    ? benefitsData
+    : benefitsData.filter(b => b.category === benefitsCategory);
+
+  const eligibleBenefitsCount = benefitsData.filter(b => b.eligible).length;
+
+  // Benefits View
+  const BenefitsView = () => (
+    <div className="space-y-6">
+      {/* 헤더 */}
+      <div className="text-center">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">혜택 자동 탐색</h2>
+        <p className="text-gray-600">나에게 맞는 세금 혜택과 지원금을 찾아보세요</p>
+      </div>
+
+      {/* 요약 카드 */}
+      <div className="bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl p-6 text-white">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-3xl font-bold">{benefitsData.length}개</div>
+            <div className="text-sm opacity-90">발견된 혜택</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold">{eligibleBenefitsCount}개</div>
+            <div className="text-sm opacity-90">신청 가능</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold">약 850만원</div>
+            <div className="text-sm opacity-90">예상 혜택 총액</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 카테고리 탭 */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {benefitsCategories.map((cat) => {
+          const Icon = cat.icon;
+          const count = cat.id === 'all'
+            ? benefitsData.length
+            : benefitsData.filter(b => b.category === cat.id).length;
+          return (
+            <button
+              key={cat.id}
+              onClick={() => setBenefitsCategory(cat.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition ${
+                benefitsCategory === cat.id
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{cat.label}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                benefitsCategory === cat.id ? 'bg-blue-400' : 'bg-gray-200'
+              }`}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 혜택 목록 */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {filteredBenefits.map((benefit) => (
+          <div
+            key={benefit.id}
+            className={`bg-white rounded-xl p-5 border-2 transition hover:shadow-lg ${
+              benefit.eligible ? 'border-green-300' : 'border-gray-200'
+            }`}
+          >
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="font-bold text-lg text-gray-800">{benefit.title}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs px-2 py-1 bg-gray-100 rounded">{benefit.provider}</span>
+                  <span className="text-xs text-gray-500">{benefit.deadline}</span>
+                </div>
+              </div>
+              {benefit.eligible && (
+                <span className="flex items-center gap-1 text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                  <CheckCircle className="w-3 h-3" />
+                  신청가능
+                </span>
+              )}
+            </div>
+
+            <div className="text-2xl font-bold text-blue-600 mb-2">{benefit.amount}</div>
+            <p className="text-sm text-gray-600 mb-3">{benefit.description}</p>
+
+            <div className="text-xs text-gray-500 mb-4">
+              <span className="font-semibold">자격요건:</span> {benefit.eligibility}
+            </div>
+
+            <button
+              className={`w-full py-2 rounded-lg font-semibold transition ${
+                benefit.eligible
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {benefit.eligible ? '신청하기' : '자격 확인'}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* 도움말 카드 */}
+      <div className="bg-gray-50 rounded-xl p-6 border">
+        <h3 className="font-bold text-lg mb-3">혜택 신청 도움이 필요하신가요?</h3>
+        <p className="text-gray-600 text-sm mb-4">
+          복잡한 세금 혜택 신청을 전문가가 도와드립니다.
+        </p>
+        <div className="flex gap-3">
+          <button className="flex-1 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition">
+            전문가 상담
+          </button>
+          <button className="flex-1 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition">
+            신청 가이드
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   // Challenges View
   const ChallengesView = () => (
@@ -3082,6 +3975,7 @@ const ReceiptFinancePlatform = () => {
               { id: 'receipts', label: '거래내역', icon: FileText },
               { id: 'budget', label: '예산관리', icon: Wallet },
               { id: 'prediction', label: '세금예측', icon: Activity },
+              { id: 'benefits', label: '혜택탐색', icon: Gift },
               { id: 'challenges', label: '챌린지', icon: Trophy },
             ].map((tab) => (
               <button
@@ -3106,6 +4000,7 @@ const ReceiptFinancePlatform = () => {
         {currentTab === 'receipts' && <ReceiptsView />}
         {currentTab === 'budget' && <BudgetView />}
         {currentTab === 'prediction' && <TaxPredictionView />}
+        {currentTab === 'benefits' && <BenefitsView />}
         {currentTab === 'challenges' && <ChallengesView />}
       </main>
 
@@ -3510,6 +4405,197 @@ const ReceiptFinancePlatform = () => {
           </div>
         </div>
       )}
+
+      {/* Settings Modal - 유저타입 및 세금 기본정보 설정 */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">설정</h3>
+              <button onClick={() => setShowSettingsModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 유저타입 선택 */}
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">사용자 유형</label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleUserTypeChange('individual')}
+                  className={"p-4 rounded-xl border-2 transition " + (userType === 'individual'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300')}
+                >
+                  <div className={"w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 " + (userType === 'individual' ? 'bg-blue-500' : 'bg-gray-200')}>
+                    <User className={"w-6 h-6 " + (userType === 'individual' ? 'text-white' : 'text-gray-500')} />
+                  </div>
+                  <div className="font-semibold text-center">개인</div>
+                  <div className="text-xs text-gray-500 text-center mt-1">근로소득자, 연말정산</div>
+                </button>
+                <button
+                  onClick={() => handleUserTypeChange('business')}
+                  className={"p-4 rounded-xl border-2 transition " + (userType === 'business'
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 hover:border-gray-300')}
+                >
+                  <div className={"w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 " + (userType === 'business' ? 'bg-purple-500' : 'bg-gray-200')}>
+                    <Briefcase className={"w-6 h-6 " + (userType === 'business' ? 'text-white' : 'text-gray-500')} />
+                  </div>
+                  <div className="font-semibold text-center">소상공인</div>
+                  <div className="text-xs text-gray-500 text-center mt-1">사업자, 종합소득세</div>
+                </button>
+              </div>
+            </div>
+
+            {/* 세금 계산용 기본 정보 입력 */}
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">
+                세금 계산 기본 정보
+              </label>
+
+              {userType === 'individual' ? (
+                /* 개인용 입력 폼 */
+                <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">연봉 (세전)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={taxBasicInfo.annualIncome}
+                        onChange={(e) => setTaxBasicInfo({...taxBasicInfo, annualIncome: parseInt(e.target.value) || 0})}
+                        className="w-full px-3 py-2 border rounded-lg text-right pr-12"
+                        placeholder="50000000"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">원</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      월 {Math.round(taxBasicInfo.annualIncome / 12).toLocaleString()}원
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">부양가족 수</label>
+                      <select
+                        value={taxBasicInfo.dependents}
+                        onChange={(e) => setTaxBasicInfo({...taxBasicInfo, dependents: parseInt(e.target.value)})}
+                        className="w-full px-3 py-2 border rounded-lg"
+                      >
+                        <option value={0}>없음</option>
+                        <option value={1}>1명</option>
+                        <option value={2}>2명</option>
+                        <option value={3}>3명</option>
+                        <option value={4}>4명 이상</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">배우자</label>
+                      <select
+                        value={taxBasicInfo.hasSpouse ? 'yes' : 'no'}
+                        onChange={(e) => setTaxBasicInfo({...taxBasicInfo, hasSpouse: e.target.value === 'yes'})}
+                        className="w-full px-3 py-2 border rounded-lg"
+                      >
+                        <option value="no">없음</option>
+                        <option value="yes">있음</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* 소상공인용 입력 폼 */
+                <div className="space-y-4 p-4 bg-purple-50 rounded-lg">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">예상 연매출</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={taxBasicInfo.expectedRevenue}
+                        onChange={(e) => setTaxBasicInfo({...taxBasicInfo, expectedRevenue: parseInt(e.target.value) || 0})}
+                        className="w-full px-3 py-2 border rounded-lg text-right pr-12"
+                        placeholder="100000000"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">원</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      월 평균 {Math.round(taxBasicInfo.expectedRevenue / 12).toLocaleString()}원
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">예상 경비 (재료비, 임대료 등)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={taxBasicInfo.expectedExpenses}
+                        onChange={(e) => setTaxBasicInfo({...taxBasicInfo, expectedExpenses: parseInt(e.target.value) || 0})}
+                        className="w-full px-3 py-2 border rounded-lg text-right pr-12"
+                        placeholder="60000000"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">원</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      경비율 {taxBasicInfo.expectedRevenue > 0 ? Math.round(taxBasicInfo.expectedExpenses / taxBasicInfo.expectedRevenue * 100) : 0}%
+                    </div>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={taxBasicInfo.isSimplifiedTax}
+                        onChange={(e) => setTaxBasicInfo({...taxBasicInfo, isSimplifiedTax: e.target.checked})}
+                        className="w-4 h-4 rounded"
+                      />
+                      <span className="text-sm">간이과세자입니다</span>
+                      <span className="text-xs text-gray-500">(연매출 8천만원 이하)</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 유저타입별 안내 */}
+            <div className={"p-4 rounded-lg " + (userType === 'individual' ? 'bg-blue-50' : 'bg-purple-50')}>
+              <div className="font-semibold mb-2">
+                {userType === 'individual' ? '개인 사용자 기능' : '소상공인 기능'}
+              </div>
+              <ul className="text-sm text-gray-600 space-y-1">
+                {userType === 'individual' ? (
+                  <>
+                    <li>• 연말정산 시뮬레이터</li>
+                    <li>• 소득공제 항목 관리</li>
+                    <li>• 근로소득세 예측</li>
+                    <li>• 예상 환급액 계산</li>
+                  </>
+                ) : (
+                  <>
+                    <li>• 종합소득세 계산</li>
+                    <li>• 부가가치세 관리</li>
+                    <li>• 매출/매입 현황</li>
+                    <li>• 필요경비 추적</li>
+                  </>
+                )}
+              </ul>
+            </div>
+
+            {/* 저장 버튼 */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="flex-1 py-3 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveSettings}
+                className={"flex-1 py-3 px-4 rounded-lg text-white font-semibold transition " +
+                  (userType === 'individual' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-purple-500 hover:bg-purple-600')}
+              >
+                저장하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Premium Modal */}
       {showPremiumModal && (
