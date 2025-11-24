@@ -19,7 +19,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Supabase 환경 변수가 설정되지 않았습니다. .env 파일을 확인해주세요.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 세션 스토리지 사용 - 탭/브라우저 닫으면 자동 로그아웃
+// (localStorage 대신 sessionStorage 사용)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+    persistSession: true,  // 세션은 유지하되, sessionStorage에만 저장
+    autoRefreshToken: true,
+  }
+});
 
 // 인증 상태 변경 리스너
 export const onAuthStateChange = (callback) => {
