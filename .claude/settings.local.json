@@ -22,7 +22,9 @@
       "Bash(timeout 15 npm run dev)",
       "Bash(cat:*)",
       "mcp__supabase__apply_migration",
-      "mcp__supabase__get_organization"
+      "mcp__supabase__get_organization",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
