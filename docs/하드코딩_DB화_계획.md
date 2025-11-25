@@ -1,6 +1,6 @@
 # FINA_R 하드코딩 데이터 DB화 계획
 
-> 작성일: 2025-11-24 | 최종 업데이트: 2025-11-25
+> 작성일: 2025-11-24 | 최종 업데이트: 2025-11-25 (v3.4)
 > 목적: MVP 단계에서 DB로 관리해야 할 하드코딩 데이터 선별 및 마이그레이션 계획
 
 ---
@@ -124,6 +124,26 @@
 | 혜택 카테고리 아이콘 | `App.jsx:3259` | UI 매핑 |
 | 부가가치세율 10% | `taxCalculator.js:78` | 법정 세율 (변경 드묾) |
 | OCR 패턴 | `ocrService.js:87` | 정규식 패턴 |
+| **브랜드 색상 팔레트** | `App.css`, `tailwind.config.js` | 디자인 시스템 (v3.4) |
+
+### 3.3 디자인 시스템 색상 (v3.4 NEW) 🆕
+
+**CSS 변수로 관리 (`src/App.css`)**
+
+| 변수명 | 색상 | HEX | 용도 |
+|--------|------|-----|------|
+| `--theme-primary` | Dark Amethyst | `#360F56` | 주요 텍스트, 헤더 |
+| `--theme-secondary` | Neon Ice | `#50FFEE` | 상태 표시, 설정 탭 |
+| `--theme-accent` | Gold | `#FFD700` | 중요 CTA, 강조 |
+| `--theme-positive` | Spring Green | `#00FF7F` | 성공/긍정 상태 |
+
+**Tailwind 확장 색상 (`tailwind.config.js`)**
+- `brand`: 브랜드 색상 계열
+- `primary`: 주요 액션 색상
+- `secondary`: 보조 색상 (green, ice)
+- `accent`: 강조 색상 (Gold)
+- `tab`: 탭별 테마 색상 (home, budget, income, settings)
+- `semantic`: 의미론적 색상 (success, warning, error, info)
 
 ---
 
@@ -245,4 +265,4 @@ ORDER BY priority;
 
 ---
 
-*작성: 2025-11-24 | 최종 업데이트: 2025-11-25 | FINA_R MVP DB화 계획 v3.3*
+*작성: 2025-11-24 | 최종 업데이트: 2025-11-25 | FINA_R MVP DB화 계획 v3.4*

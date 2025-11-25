@@ -1,57 +1,293 @@
+/* ============================================
+   FINA_R Design System - CSS Variables
+   Colors from: src/constants/colors.js
+   ============================================ */
+
 :root {
-  --theme-primary: #360f56;
-  --theme-secondary: #50ffee;
-  --theme-accent: #ffd700;
-  --theme-soft: rgba(54, 15, 86, 0.08);
-  --theme-positive: #00ff7f;
+  /* Primary - Navy */
+  --color-primary: #003262;
+  --color-primary-light: #004080;
+  --color-primary-dark: #001a40;
+  --color-primary-soft: #E6F4FF;
+
+  /* Secondary - Mint */
+  --color-secondary: #00FFBF;
+  --color-secondary-light: #66FFD9;
+  --color-secondary-dark: #00CC99;
+  --color-secondary-soft: #E6FFF7;
+
+  /* Tertiary - Cyan */
+  --color-tertiary: #0FFFFF;
+  --color-tertiary-light: #66FFFF;
+  --color-tertiary-soft: #E6FFFF;
+
+  /* Accent - Peach */
+  --color-accent: #FFC591;
+  --color-accent-light: #FFD9B3;
+  --color-accent-soft: #FFF5EC;
+
+  /* Semantic */
+  --color-success: #00FFBF;
+  --color-warning: #FFC591;
+  --color-error: #FF6B6B;
+  --color-info: #0FFFFF;
+
+  /* Legacy aliases (for backward compatibility) */
+  --theme-primary: #003262;
+  --theme-secondary: #00FFBF;
+  --theme-accent: #FFC591;
+  --theme-soft: rgba(0, 50, 98, 0.08);
+  --theme-positive: #00FFBF;
 }
 
-/* Theme helpers */
+/* ============================================
+   Theme Helper Classes
+   ============================================ */
+
 .theme-surface {
   background: #ffffff;
   border: 1px solid var(--theme-soft);
 }
 
 .theme-gradient {
-  background-image: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
+  background-image: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
   color: #fff;
 }
 
 .theme-accent {
-  background-color: var(--theme-accent);
-  color: var(--theme-primary);
+  background-color: var(--color-accent);
+  color: var(--color-primary);
 }
 
-/* Override common utility colors to follow the active theme palette */
-.bg-blue-50 { background-color: var(--theme-soft) !important; }
-.bg-blue-100 { background-color: var(--theme-soft) !important; }
-.bg-blue-200 { background-color: var(--theme-soft) !important; }
-.bg-blue-500 { background-color: var(--theme-primary) !important; }
-.text-blue-600, .text-blue-500, .text-blue-700 { color: var(--theme-primary) !important; }
-.border-blue-500, .border-blue-200 { border-color: var(--theme-primary) !important; }
+/* ============================================
+   Tailwind Utility Color Overrides
+   ============================================ */
 
-.bg-purple-50 { background-color: var(--theme-soft) !important; }
-.bg-purple-500 { background-color: var(--theme-secondary) !important; }
-.text-purple-500, .text-purple-900 { color: var(--theme-primary) !important; }
-.border-purple-200 { border-color: var(--theme-soft) !important; }
+/* Blue → Primary (Navy) */
+.bg-blue-50 { background-color: var(--color-primary-soft) !important; }
+.bg-blue-100 { background-color: var(--color-primary-soft) !important; }
+.bg-blue-200 { background-color: var(--color-primary-soft) !important; }
+.bg-blue-500 { background-color: var(--color-primary) !important; }
+.text-blue-600, .text-blue-500, .text-blue-700 { color: var(--color-primary) !important; }
+.border-blue-500, .border-blue-200 { border-color: var(--color-primary) !important; }
 
-.bg-orange-500 { background-color: var(--theme-accent) !important; }
-.bg-orange-50 { background-color: rgba(255, 215, 0, 0.16) !important; }
-.text-orange-500 { color: var(--theme-accent) !important; }
-.border-orange-200 { border-color: rgba(255, 215, 0, 0.45) !important; }
+/* Purple → Primary (Navy) */
+.bg-purple-50 { background-color: var(--color-primary-soft) !important; }
+.bg-purple-500 { background-color: var(--color-primary) !important; }
+.text-purple-500, .text-purple-900 { color: var(--color-primary) !important; }
+.border-purple-200 { border-color: var(--color-primary-soft) !important; }
 
-.bg-green-50 { background-color: rgba(0, 255, 127, 0.12) !important; }
-.bg-green-100 { background-color: rgba(0, 255, 127, 0.16) !important; }
-.text-green-600, .text-green-700 { color: var(--theme-positive) !important; }
-.border-green-200 { border-color: rgba(0, 255, 127, 0.4) !important; }
+/* Orange → Accent (Peach) */
+.bg-orange-500 { background-color: var(--color-accent) !important; }
+.bg-orange-50 { background-color: var(--color-accent-soft) !important; }
+.text-orange-500 { color: var(--color-accent) !important; }
+.border-orange-200 { border-color: rgba(255, 197, 145, 0.45) !important; }
 
-.from-blue-500 { --tw-gradient-from: var(--theme-primary) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(80, 255, 238, 1)) !important; }
-.to-purple-500 { --tw-gradient-to: var(--theme-secondary) !important; }
-.from-purple-500 { --tw-gradient-from: var(--theme-secondary) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(54, 15, 86, 1)) !important; }
-.to-red-500 { --tw-gradient-to: var(--theme-primary) !important; }
+/* Green → Secondary (Mint) */
+.bg-green-50 { background-color: var(--color-secondary-soft) !important; }
+.bg-green-100 { background-color: var(--color-secondary-soft) !important; }
+.text-green-600, .text-green-700 { color: var(--color-secondary) !important; }
+.border-green-200 { border-color: rgba(0, 255, 191, 0.4) !important; }
 
-/* Accent rings and focus */
+/* Gradients */
+.from-blue-500 {
+  --tw-gradient-from: var(--color-primary) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, var(--color-secondary)) !important;
+}
+.to-purple-500 { --tw-gradient-to: var(--color-secondary) !important; }
+.from-purple-500 {
+  --tw-gradient-from: var(--color-secondary) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, var(--color-primary)) !important;
+}
+.to-red-500 { --tw-gradient-to: var(--color-primary) !important; }
+
+/* ============================================
+   Focus States
+   ============================================ */
+
 input:focus, select:focus, textarea:focus {
-  outline-color: var(--theme-primary);
-  box-shadow: 0 0 0 2px rgba(54, 15, 86, 0.2);
+  outline-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(0, 50, 98, 0.2);
+}
+
+/* ============================================
+   숫자/금액 입력 스타일
+   ============================================ */
+
+/* 금액 입력 - 오른쪽 정렬 */
+input[type="number"] {
+  text-align: right;
+}
+
+/* 금액 표시 - 오른쪽 정렬 */
+.amount-display,
+.text-right-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 카드 내 금액 - 오른쪽 정렬 강제 */
+.amount-card {
+  text-align: right !important;
+}
+
+.amount-card * {
+  text-align: right !important;
+}
+
+/* 숫자 입력 스피너 숨김 */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ============================================
+   차분한 색상 팔레트 (차트용)
+   ============================================ */
+:root {
+  --chart-green: #10B981;      /* 차분한 초록 (emerald-500) */
+  --chart-green-light: #34D399; /* 밝은 초록 (emerald-400) */
+  --chart-red: #EF4444;        /* 차분한 빨강 (red-500) */
+  --chart-red-light: #F87171;  /* 밝은 빨강 (red-400) */
+  --color-danger: #DC2626;     /* D-day 강조색 */
+}
+
+/* ============================================
+   한글 단어 단위 줄바꿈
+   ============================================ */
+
+/* 기본: 한글 단어 단위로 줄바꿈 */
+.keep-all {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* 줄바꿈 금지 (짧은 라벨용) */
+.nowrap {
+  white-space: nowrap;
+}
+
+/* 연말정산 시뮬레이터 모달 전체에 적용 */
+.tax-simulator-modal {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.tax-simulator-modal label,
+.tax-simulator-modal h4,
+.tax-simulator-modal h5 {
+  word-break: keep-all;
+}
+
+/* 태그/배지 - 줄바꿈 금지 */
+.tax-simulator-modal .tag-nowrap {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 긴 텍스트 자간 축소 */
+.tight-spacing {
+  letter-spacing: -0.02em;
+}
+
+/* ============================================
+   반응형 디자인 - 모바일 최적화
+   ============================================ */
+
+/* 모바일 기기 (640px 이하) */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+
+  header h1 {
+    font-size: 1rem !important;
+  }
+
+  header p {
+    font-size: 0.65rem !important;
+  }
+
+  /* 탭 네비게이션 - 축소 및 스크롤 */
+  nav .flex.gap-1 {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  nav .flex.gap-1::-webkit-scrollbar {
+    display: none;
+  }
+
+  nav button {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.75rem !important;
+    white-space: nowrap;
+  }
+
+  nav button svg {
+    width: 1rem !important;
+    height: 1rem !important;
+  }
+
+  /* 카드 및 컨텐츠 영역 */
+  .text-2xl {
+    font-size: 1.25rem !important;
+  }
+
+  .text-xl {
+    font-size: 1rem !important;
+  }
+
+  .text-lg {
+    font-size: 0.875rem !important;
+  }
+
+  /* 버튼 크기 축소 */
+  button, .btn {
+    font-size: 0.75rem !important;
+  }
+
+  /* 패딩/마진 축소 */
+  .px-4 {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  .py-4 {
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+
+  .gap-4 {
+    gap: 0.75rem !important;
+  }
+
+  /* 그리드 1컬럼으로 변경 */
+  .grid.md\:grid-cols-2,
+  .grid.md\:grid-cols-3,
+  .grid.md\:grid-cols-4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* 태블릿 (641px ~ 768px) */
+@media (min-width: 641px) and (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+
+  nav button {
+    padding: 0.625rem 1rem !important;
+    font-size: 0.8125rem !important;
+  }
+
+  .text-2xl {
+    font-size: 1.375rem !important;
+  }
 }

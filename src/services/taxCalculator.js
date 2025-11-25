@@ -2,10 +2,16 @@
  * 한국 세금 계산기 서비스
  * - 개인: 근로소득세, 연말정산
  * - 사업자: 종합소득세, 부가가치세
+ *
+ * 2025년 세법 개정사항 반영 (2024년 귀속분)
+ * - 신용카드 소득공제 3중 한도 (기본/추가/증가분)
+ * - 4대보험 상·하한 적용
+ * - 월세 세액공제 한도 1,000만원, 소득기준 8천만원
+ * - 연금저축 600만원, IRP 포함 900만원
  */
 
 // =============================================
-// 2024년 기준 소득세율표 (과세표준)
+// 2025년 기준 소득세율표 (과세표준) - 변동 없음
 // =============================================
 const INCOME_TAX_BRACKETS = [
   { min: 0, max: 14000000, rate: 0.06, deduction: 0 },
@@ -55,10 +61,10 @@ const SPECIAL_DEDUCTION_LIMITS = {
     self: Infinity, // 본인: 한도 없음
   },
   housing: {
-    rent: 7500000, // 월세 750만원 한도
+    rent: 10000000, // 월세 공제대상액 한도 1,000만원 (2025년 개정)
     mortgage: {
-      under15y: 3000000,
-      under30y: 18000000,
+      under15y: 6000000,  // 600만원 (2025년 개정, 기존 300만)
+      under30y: 20000000, // 2,000만원 (2025년 개정, 기존 1,800만)
       over30y: 5000000,
     },
   },
@@ -69,9 +75,94 @@ const SPECIAL_DEDUCTION_LIMITS = {
     designated: 0.30, // 지정기부금 30%
   },
   pension: {
-    personal: 4000000, // 연금저축 400만원
-    irp: 7000000, // IRP 포함 700만원
+    personal: 6000000, // 연금저축 600만원 (2025년 개정, 기존 400만)
+    irp: 9000000, // IRP 포함 900만원 (2025년 개정, 기존 700만)
   },
+};
+
+// =============================================
+// 2025년 신용카드 소득공제 상수
+// =============================================
+const CREDIT_CARD_DEDUCTION = {
+  // 최저사용금액: 총급여의 25%
+  minimumUsageRate: 0.25,
+
+  // 공제율
+  rates: {
+    creditCard: 0.15,        // 신용카드 15%
+    debitCard: 0.30,         // 체크카드/직불카드 30%
+    cash: 0.30,              // 현금영수증 30%
+    traditionalMarket: 0.40, // 전통시장 40%
+    publicTransport: 0.40,   // 대중교통 40%
+    culture: 0.30,           // 도서/공연/박물관 30%
+    sports: 0.30,            // 체육시설 30% (2025년 7월부터, 문화비와 동일)
+  },
+
+  // 기본한도 (총급여 구간별)
+  basicLimits: [
+    { maxIncome: 70000000, limit: 3000000 },   // 7천만 이하: 300만원
+    { maxIncome: 120000000, limit: 2500000 },  // 7천~1.2억: 250만원
+    { maxIncome: Infinity, limit: 2000000 },   // 1.2억 초과: 200만원
+  ],
+
+  // 추가한도 (전통시장+대중교통+문화비+체육시설)
+  additionalLimits: {
+    under70m: 3000000,  // 7천만 이하: 300만원 (시장+교통+문화+체육)
+    over70m: 2000000,   // 7천만 초과: 200만원 (시장+교통만, 문화/체육 제외)
+  },
+
+  // 소비증가분 추가공제 (전년 대비 5% 초과분)
+  consumptionIncrease: {
+    threshold: 0.05,  // 5% 초과분
+    rate: 0.10,       // 10% 공제
+    limit: 1000000,   // 한도 100만원
+  },
+};
+
+// =============================================
+// 2025년 4대보험 상수 (상·하한 포함)
+// =============================================
+const INSURANCE_RATES_2025 = {
+  // 국민연금 (근로자 부담분 4.5%)
+  nationalPension: {
+    rate: 0.045,
+    // 기준소득월액 상·하한 (1~6월)
+    firstHalf: { min: 390000, max: 6170000 },
+    // 기준소득월액 상·하한 (7~12월)
+    secondHalf: { min: 400000, max: 6370000 },
+  },
+
+  // 건강보험 (근로자 부담분 3.545%)
+  healthInsurance: {
+    rate: 0.03545,
+    // 보험료 상·하한 (보수월액 아닌 보험료 기준)
+    minPremium: 19780,    // 하한 보험료
+    maxPremium: 9008340,  // 상한 보험료
+  },
+
+  // 장기요양보험 (건강보험료의 12.95%)
+  longTermCare: {
+    rate: 0.1295,
+  },
+
+  // 고용보험 (근로자 부담분 0.9%)
+  employmentInsurance: {
+    rate: 0.009,
+    // 상·하한 없음
+  },
+};
+
+// =============================================
+// 2025년 월세 세액공제 상수
+// =============================================
+const RENT_TAX_CREDIT_2025 = {
+  maxEligibleRent: 10000000, // 공제대상 월세액 한도 1,000만원
+  maxIncome: 80000000,       // 총급여 8천만원 이하
+  rates: {
+    under55m: 0.17,  // 5,500만원 이하: 17%
+    over55m: 0.15,   // 5,500만원 초과: 15%
+  },
+  incomeThreshold: 55000000, // 공제율 구분 기준
 };
 
 // 부가가치세율
@@ -281,8 +372,10 @@ export const calculateIndividualTax = ({
   medicalGeneral = 0, // 일반 의료비 (상세 입력 지원)
   medicalSenior = 0, // 고령자 의료비
   childDependents = 0, // 자녀 수 (자녀 세액공제용)
+  creditCardDeduction = 0, // 신용카드 소득공제 (2025년)
 }) => {
   const safeAnnualIncome = Math.max(0, annualIncome || 0);
+  const safeCardDeduction = Math.max(0, creditCardDeduction || 0);
 
   // 1. 근로소득공제
   const earnedIncomeDeduction = calculateEarnedIncomeDeduction(safeAnnualIncome);
@@ -319,7 +412,10 @@ export const calculateIndividualTax = ({
   const eligibleChildDependents = Math.max(0, childDependents || dependents || 0);
 
   // 5. 과세표준
-  const taxableIncome = Math.max(0, earnedIncome - personalDeductions - specialDeductions - cappedHousingDeduction);
+  const taxableIncome = Math.max(
+    0,
+    earnedIncome - personalDeductions - specialDeductions - cappedHousingDeduction - safeCardDeduction,
+  );
 
   // 6. 산출세액
   const calculatedTax = calculateIncomeTax(taxableIncome);
@@ -1022,6 +1118,388 @@ export const calculateDetailedTaxHealthScores = ({
   };
 };
 
+// =============================================
+// 2025년 신규 함수: 신용카드 소득공제 계산
+// =============================================
+/**
+ * 신용카드 등 소득공제 계산 (2025년 기준)
+ *
+ * 【계산 구조】
+ * 1. 총 사용액 - 최저사용금액(25%) = 초과분
+ * 2. 초과분에 대해 결제수단별 공제율 적용
+ * 3. 3중 한도 적용: 기본한도 + 추가한도 + 소비증가분
+ *
+ * 【공제율】
+ * - 신용카드: 15%, 체크/현금: 30%, 전통시장/대중교통: 40%, 문화/체육: 30%
+ *
+ * 【한도】
+ * - 기본: 7천만↓300만, 7천~1.2억 250만, 1.2억↑200만
+ * - 추가: 7천만↓300만(시장+교통+문화+체육), 7천만↑200만(시장+교통만)
+ * - 소비증가분: 전년대비 5%↑ 사용시 10% 추가공제, 한도 100만
+ */
+export const calculateCreditCardDeduction = ({
+  annualIncome = 0,          // 연간 총급여
+  creditCardAmount = 0,      // 신용카드 사용액 (공제율 15%)
+  debitCardAmount = 0,       // 체크카드/직불카드 (공제율 30%)
+  cashReceiptAmount = 0,     // 현금영수증 (공제율 30%)
+  traditionalMarketAmount = 0, // 전통시장 (공제율 40%, 추가한도)
+  publicTransportAmount = 0,   // 대중교통 (공제율 40%, 추가한도)
+  cultureAmount = 0,         // 도서/공연/박물관 (공제율 30%, 7천만↓만 추가한도)
+  sportsAmount = 0,          // 체육시설 (공제율 30%, 7천만↓만 추가한도, 2025.7~)
+  previousYearTotal = 0,     // 전년도 총 사용액 (소비증가분 계산용)
+}) => {
+  // 상수 구조분해: rates(공제율), basicLimits(기본한도), additionalLimits(추가한도), consumptionIncrease(소비증가분), minimumUsageRate(25%)
+  const { rates, basicLimits, additionalLimits, consumptionIncrease, minimumUsageRate } = CREDIT_CARD_DEDUCTION;
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 1: 최저사용금액 계산 (총급여의 25%)
+  // ───────────────────────────────────────────────────────────────
+  const minimumUsage = annualIncome * minimumUsageRate;  // 예: 5천만원 × 0.25 = 1,250만원
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 2: 총 사용액 계산 (모든 결제수단 합산)
+  // ───────────────────────────────────────────────────────────────
+  const totalUsage = creditCardAmount + debitCardAmount + cashReceiptAmount +  // 일반 사용액
+    traditionalMarketAmount + publicTransportAmount + cultureAmount + sportsAmount;  // 추가한도 항목 포함
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 3: 최저사용금액 미달 체크 → 공제 없음
+  // ───────────────────────────────────────────────────────────────
+  if (totalUsage <= minimumUsage) {  // 총 사용액 ≤ 25%면 공제 대상 없음
+    return {
+      totalUsage,                    // 총 사용액 (원본)
+      minimumUsage,                  // 최저사용금액 (25%)
+      excessAmount: 0,               // 초과분 없음
+      basicDeduction: 0,             // 기본공제 0
+      additionalDeduction: 0,        // 추가공제 0
+      increaseDeduction: 0,          // 소비증가분 공제 0
+      totalDeduction: 0,             // 총 공제액 0
+      breakdown: {},                 // 항목별 내역 없음
+    };
+  }
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 4: 초과 사용액 계산 (공제 대상 금액)
+  // ───────────────────────────────────────────────────────────────
+  const excessAmount = totalUsage - minimumUsage;  // 예: 2,000만원 - 1,250만원 = 750만원 (이 금액만 공제 대상)
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 5: 최저사용금액 순차 차감 (신용카드→체크→현금→전통시장→대중교통→문화→체육)
+  // 【핵심】공제율 낮은 신용카드(15%)부터 먼저 25%를 채우고, 나머지가 공제 대상
+  // ───────────────────────────────────────────────────────────────
+  let remainingMinimum = minimumUsage;  // 아직 채워야 할 최저사용금액
+
+  // 기본한도 대상 항목 순서 (공제율 낮은 순)
+  const usageOrder = [
+    { amount: creditCardAmount, rate: rates.creditCard, name: 'creditCard' },   // 15% (가장 먼저 25% 채움)
+    { amount: debitCardAmount, rate: rates.debitCard, name: 'debitCard' },       // 30%
+    { amount: cashReceiptAmount, rate: rates.cash, name: 'cash' },               // 30%
+  ];
+
+  const breakdown = {};           // 항목별 공제 내역 저장
+  let basicDeductionTotal = 0;    // 기본한도 공제액 누적
+
+  /**
+   * applyDeduction: 각 항목에 대해 최저사용금액 차감 후 공제액 계산
+   * @param amount - 해당 항목 사용금액
+   * @param rate - 공제율 (0.15, 0.30, 0.40)
+   * @param name - 항목명 (breakdown 저장용)
+   * @param allowDeduction - 공제 허용 여부 (7천만↑ 문화/체육은 false)
+   */
+  const applyDeduction = (amount, rate, name, { allowDeduction = true } = {}) => {
+    if (amount <= 0) {  // 사용액 없으면 스킵
+      breakdown[name] = { amount, deductible: 0, deduction: 0, excluded: !allowDeduction };
+      return 0;
+    }
+
+    // Case 1: 이 항목 전체가 최저사용금액 채우기에 사용됨 → 공제 0
+    if (remainingMinimum >= amount) {
+      remainingMinimum -= amount;  // 최저사용금액에서 차감
+      breakdown[name] = { amount, deductible: 0, deduction: 0, excluded: !allowDeduction };
+      return 0;  // 공제액 없음
+    }
+
+    // Case 2: 이 항목이 최저사용금액을 넘음 → 초과분만 공제
+    const deductible = amount - remainingMinimum;  // 예: 500만원 - 남은 200만원 = 300만원 (공제 대상)
+    const deduction = allowDeduction ? Math.floor(deductible * rate) : 0;  // 공제액 = 300만 × 15% = 45만
+    breakdown[name] = {
+      amount,                                      // 원래 사용금액
+      deductible: allowDeduction ? deductible : 0, // 공제 대상 금액
+      deduction,                                   // 실제 공제액
+      excluded: !allowDeduction                    // 7천만↑ 문화/체육 제외 여부
+    };
+    remainingMinimum = 0;  // 최저사용금액 다 채움
+    return deduction;
+  };
+
+  // 기본한도 항목들 순차 처리 (신용카드 → 체크 → 현금)
+  for (const item of usageOrder) {
+    basicDeductionTotal += applyDeduction(item.amount, item.rate, item.name);
+  }
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 6: 기본한도 적용
+  // ───────────────────────────────────────────────────────────────
+  const basicLimit = basicLimits.find(b => annualIncome <= b.maxIncome)?.limit || 2000000;  // 소득구간별 한도
+  const basicDeduction = Math.min(basicDeductionTotal, basicLimit);  // 한도 초과 시 잘라냄
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 7: 추가한도 항목 계산 (전통시장, 대중교통, 문화비, 체육시설)
+  // 【주의】이 항목들도 최저사용금액(25%) 차감 대상임!
+  // ───────────────────────────────────────────────────────────────
+  const isUnder70m = annualIncome <= 70000000;  // 7천만원 이하 여부 (문화/체육 포함 기준)
+  let additionalDeductionTotal = 0;
+
+  // 전통시장 (40%) - 모든 소득구간 추가한도 적용
+  additionalDeductionTotal += applyDeduction(
+    traditionalMarketAmount,
+    rates.traditionalMarket,  // 0.40
+    'traditionalMarket',
+  );
+
+  // 대중교통 (40%) - 모든 소득구간 추가한도 적용
+  additionalDeductionTotal += applyDeduction(
+    publicTransportAmount,
+    rates.publicTransport,  // 0.40
+    'publicTransport',
+  );
+
+  // 문화비 (30%) - 7천만↓만 추가한도, 7천만↑는 최저사용금액 차감만 반영
+  additionalDeductionTotal += applyDeduction(
+    cultureAmount,
+    rates.culture,  // 0.30
+    'culture',
+    { allowDeduction: isUnder70m },  // 7천만↑면 공제 불가 (excluded: true)
+  );
+
+  // 체육시설 (30%) - 7천만↓만 추가한도, 7천만↑는 최저사용금액 차감만 반영
+  additionalDeductionTotal += applyDeduction(
+    sportsAmount,
+    rates.sports,  // 0.30 (40% 아님!)
+    'sports',
+    { allowDeduction: isUnder70m },  // 7천만↑면 공제 불가 (excluded: true)
+  );
+
+  // 추가한도 적용: 7천만↓ 300만원, 7천만↑ 200만원
+  const additionalLimit = isUnder70m ? additionalLimits.under70m : additionalLimits.over70m;
+  const additionalDeduction = Math.min(additionalDeductionTotal, additionalLimit);
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 8: 소비증가분 추가공제 계산
+  // 전년 대비 5% 초과 사용시 → 초과분의 10%, 한도 100만원
+  // ───────────────────────────────────────────────────────────────
+  let increaseDeduction = 0;
+  if (previousYearTotal > 0) {  // 전년도 데이터 있을 때만
+    const increaseThreshold = previousYearTotal * (1 + consumptionIncrease.threshold);  // 전년도 × 1.05
+    if (totalUsage > increaseThreshold) {  // 올해 > 전년도×1.05 이면
+      const increaseAmount = totalUsage - increaseThreshold;  // 5% 초과분
+      increaseDeduction = Math.min(
+        Math.floor(increaseAmount * consumptionIncrease.rate),  // 초과분 × 10%
+        consumptionIncrease.limit  // 한도 100만원
+      );
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────
+  // STEP 9: 총 공제액 (3중 한도 별도 합산)
+  // 【핵심】기본한도 + 추가한도 + 소비증가분은 각각 별도 한도이므로 단순 합산
+  // ───────────────────────────────────────────────────────────────
+  const totalDeduction = basicDeduction + additionalDeduction + increaseDeduction;
+
+  return {
+    totalUsage,
+    minimumUsage,
+    excessAmount,
+    basicDeduction,
+    basicLimit,
+    additionalDeduction,
+    additionalLimit,
+    increaseDeduction,
+    totalDeduction,
+    breakdown,
+    isUnder70m,
+  };
+};
+
+// =============================================
+// 2025년 신규 함수: 4대보험 자동 계산
+// =============================================
+/**
+ * 4대보험료 자동 계산 (2025년 기준, 상·하한 적용)
+ * @param {number} monthlyIncome - 월 소득
+ * @param {number} month - 적용 월 (1~12, 국민연금 상·하한 분기 적용)
+ * @returns {Object} 4대보험료 상세
+ */
+export const calculateInsurancePremiums = (monthlyIncome, month = new Date().getMonth() + 1) => {
+  const { nationalPension, healthInsurance, longTermCare, employmentInsurance } = INSURANCE_RATES_2025;
+
+  // 1. 국민연금 (기준소득월액 상·하한 적용)
+  const pensionLimits = month <= 6 ? nationalPension.firstHalf : nationalPension.secondHalf;
+  const pensionBase = Math.min(Math.max(monthlyIncome, pensionLimits.min), pensionLimits.max);
+  const pensionPremium = Math.floor(pensionBase * nationalPension.rate);
+
+  // 2. 건강보험 (보험료 상·하한 적용)
+  let healthPremium = Math.floor(monthlyIncome * healthInsurance.rate);
+  healthPremium = Math.max(healthPremium, healthInsurance.minPremium / 2); // 근로자 부담분
+  healthPremium = Math.min(healthPremium, healthInsurance.maxPremium / 2); // 근로자 부담분
+
+  // 3. 장기요양보험 (건강보험료의 12.95%)
+  const longTermCarePremium = Math.floor(healthPremium * longTermCare.rate);
+
+  // 4. 고용보험 (상·하한 없음)
+  const employmentPremium = Math.floor(monthlyIncome * employmentInsurance.rate);
+
+  // 총액
+  const totalPremium = pensionPremium + healthPremium + longTermCarePremium + employmentPremium;
+
+  return {
+    monthlyIncome,
+    month,
+    nationalPension: {
+      base: pensionBase,
+      premium: pensionPremium,
+      limits: pensionLimits,
+    },
+    healthInsurance: {
+      premium: healthPremium,
+      limits: { min: healthInsurance.minPremium / 2, max: healthInsurance.maxPremium / 2 },
+    },
+    longTermCare: {
+      premium: longTermCarePremium,
+      rate: longTermCare.rate,
+    },
+    employmentInsurance: {
+      premium: employmentPremium,
+    },
+    totalPremium,
+    annualTotal: totalPremium * 12,
+  };
+};
+
+/**
+ * 연간 4대보험료 계산 (월별 상·하한 변동 반영)
+ */
+export const calculateAnnualInsurancePremiums = (monthlyIncome) => {
+  let annualTotal = 0;
+  const monthlyDetails = [];
+
+  for (let month = 1; month <= 12; month++) {
+    const monthly = calculateInsurancePremiums(monthlyIncome, month);
+    annualTotal += monthly.totalPremium;
+    monthlyDetails.push(monthly);
+  }
+
+  return {
+    monthlyIncome,
+    annualTotal,
+    monthlyAverage: Math.floor(annualTotal / 12),
+    monthlyDetails,
+    // 연말정산용 연간 합계
+    annualPension: monthlyDetails.reduce((sum, m) => sum + m.nationalPension.premium, 0),
+    annualHealth: monthlyDetails.reduce((sum, m) => sum + m.healthInsurance.premium, 0),
+    annualLongTermCare: monthlyDetails.reduce((sum, m) => sum + m.longTermCare.premium, 0),
+    annualEmployment: monthlyDetails.reduce((sum, m) => sum + m.employmentInsurance.premium, 0),
+  };
+};
+
+// =============================================
+// 2025년 신규 함수: 월세 세액공제 계산
+// =============================================
+/**
+ * 월세 세액공제 계산 (2025년 기준)
+ * - 공제대상 월세액 한도: 1,000만원
+ * - 총급여 8천만원 이하 무주택자
+ * - 공제율: 5,500만원 이하 17%, 초과 15%
+ */
+export const calculateRentTaxCredit = ({
+  annualRent = 0,           // 연간 월세 총액
+  annualIncome = 0,         // 총급여
+  isHomeOwner = false,      // 주택 소유 여부
+  housingSize = 85,         // 전용면적 (㎡)
+  housingPrice = 0,         // 기준시가 (원)
+}) => {
+  const { maxEligibleRent, maxIncome, rates, incomeThreshold } = RENT_TAX_CREDIT_2025;
+
+  // 조건 체크
+  const conditions = {
+    isEligible: true,
+    reasons: [],
+  };
+
+  if (isHomeOwner) {
+    conditions.isEligible = false;
+    conditions.reasons.push('무주택자만 가능');
+  }
+
+  if (annualIncome > maxIncome) {
+    conditions.isEligible = false;
+    conditions.reasons.push(`총급여 ${(maxIncome / 10000).toLocaleString()}만원 초과`);
+  }
+
+  if (housingSize > 85 && housingPrice > 400000000) {
+    conditions.isEligible = false;
+    conditions.reasons.push('국민주택규모(85㎡) 또는 기준시가 4억원 초과');
+  }
+
+  if (!conditions.isEligible) {
+    return {
+      annualRent,
+      eligibleRent: 0,
+      rate: 0,
+      credit: 0,
+      maxCredit: 0,
+      conditions,
+    };
+  }
+
+  // 공제 계산
+  const eligibleRent = Math.min(annualRent, maxEligibleRent);
+  const rate = annualIncome <= incomeThreshold ? rates.under55m : rates.over55m;
+  const credit = Math.floor(eligibleRent * rate);
+  const maxCredit = annualIncome <= incomeThreshold
+    ? Math.floor(maxEligibleRent * rates.under55m)  // 170만원
+    : Math.floor(maxEligibleRent * rates.over55m);  // 150만원
+
+  return {
+    annualRent,
+    eligibleRent,
+    rate,
+    credit,
+    maxCredit,
+    conditions,
+    // 추가 정보
+    incomeCategory: annualIncome <= incomeThreshold ? '5,500만원 이하' : '5,500만원 초과',
+    ratePercent: `${(rate * 100).toFixed(0)}%`,
+  };
+};
+
+/**
+ * 혼인 세액공제 (2024~2026년 한정)
+ * ⚠️ 세부 요건 미확정으로 기본 로직만 구현
+ */
+export const calculateMarriageCredit = ({
+  isMarriedThisYear = false,  // 해당 연도 혼인신고 여부
+  isFirstMarriageCredit = true, // 생애 첫 혼인공제 여부
+}) => {
+  // TODO: 세부 요건 확정 후 상세 구현
+  // - 혼인신고일 vs 귀속연도 기준
+  // - 부부 중 1인만 소득 있는 경우
+  // - 2024~2026년 한정
+
+  if (!isMarriedThisYear || !isFirstMarriageCredit) {
+    return {
+      credit: 0,
+      reason: !isMarriedThisYear ? '해당 연도 혼인신고 없음' : '이미 혼인공제 적용',
+    };
+  }
+
+  return {
+    credit: 500000, // 본인 기준 50만원
+    maxCredit: 1000000, // 부부 합산 100만원
+    note: '2024~2026년 혼인신고 시 생애 1회 적용',
+  };
+};
+
 export default {
   calculateIndividualTax,
   calculateBusinessTax,
@@ -1041,4 +1519,10 @@ export default {
   calculateRefundPotentialScore,
   calculateSavingsPotentialScore,
   calculateDetailedTaxHealthScores,
+  // 2025년 신규 함수
+  calculateCreditCardDeduction,
+  calculateInsurancePremiums,
+  calculateAnnualInsurancePremiums,
+  calculateRentTaxCredit,
+  calculateMarriageCredit,
 };

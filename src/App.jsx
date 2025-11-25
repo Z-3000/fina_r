@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Camera, Upload, Wallet, TrendingUp, TrendingDown, PieChart, FileText, Users, CreditCard, Calculator, Award, ChevronRight, Plus, X, Check, AlertCircle, Sparkles, Calendar, DollarSign, Building, Bell, Target, Trophy, MessageCircle, ThumbsUp, Send, Zap, Crown, Star, Shield, Gift, ArrowUp, ArrowDown, Activity, Clock, CheckCircle, Briefcase, User, Flame, Repeat, Lock, Unlock, PartyPopper, Ticket, Coffee, ShoppingBag, Link, RefreshCw, CheckCircle2, Timer, BarChart3, Eye, EyeOff, Download, FileCheck, Folder, Search, Filter, TrendingUpIcon, AlertTriangle, Lightbulb, Receipt, Heart, GraduationCap, Home, Car, Baby, Pill, BookOpen, Laptop, Waves, LogIn, UserPlus, Key } from 'lucide-react';
-import { PieChart as RechartsPie, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, RadialBarChart, RadialBar } from 'recharts';
+import { PieChart as RechartsPie, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, RadialBarChart, RadialBar, ComposedChart, ReferenceLine } from 'recharts';
 import { supabase, onAuthStateChange } from './lib/supabase';
 import './App.css';
 import {
@@ -35,6 +35,9 @@ import {
   calculateIndividualTax,
   calculateBusinessTax,
   calculateDetailedTaxHealthScores,
+  calculateCreditCardDeduction,
+  calculateAnnualInsurancePremiums,
+  calculateRentTaxCredit,
 } from './services/taxCalculator';
 import {
   generateMonthlyExpenseReport,
@@ -46,54 +49,67 @@ import {
   exportAllDataToExcel,
 } from './services/exportService';
 
-// ============================================
-// FINA_R Custom Color System
-// Base Colors: #0FFFFF, #003262, #FFC591, #00FFBF
-// ============================================
+// ===== Color System (from constants/colors.js) =====
+import {
+  COLORS,
+  TAB_THEMES,
+  PRIMARY_COLOR,
+  SECONDARY_COLOR,
+  TERTIARY_COLOR,
+  ACCENT_COLOR,
+  PRIMARY_LIGHT,
+  PRIMARY_DARK,
+  SECONDARY_LIGHT,
+  SECONDARY_DARK,
+  TERTIARY_LIGHT,
+  TERTIARY_DARK,
+  ACCENT_LIGHT,
+  ACCENT_DARK,
+  SUCCESS_COLOR,
+  WARNING_COLOR,
+  ERROR_COLOR,
+  INFO_COLOR,
+  ACCENT_GOLD,
+  BRAND_COLOR,
+  PRIMARY_BLUE,
+  SUCCESS_GREEN,
+  NEON_ICE,
+  withAlpha,
+  getScoreColor,
+  getTrendColor,
+} from './constants/colors';
 
-// 탭별 테마 컬러 매핑
-// Cyan (#0FFFFF) - 하이라이트, 정보
-// Navy (#003262) - 메인, 전문성, 신뢰
-// Peach (#FFC591) - 따뜻한 악센트, 주의, 보상
-// Mint (#00FFBF) - 성공, 성장, 긍정
-
-const TAB_THEMES = {
-  dashboard: { primary: '#003262', soft: '#E6F4FF', text: '#FFFFFF', border: '#003262' },  // Navy - 메인 대시보드
-  receipts: { primary: '#003262', soft: '#E6F4FF', text: '#FFFFFF', border: '#004080' },   // Navy - 영수증/문서
-  budget: { primary: '#FFC591', soft: '#FFF5EC', text: '#003262', border: '#FFC591' },     // Peach - 지출/예산
-  prediction: { primary: '#00FFBF', soft: '#E6FFF7', text: '#003262', border: '#00FFBF' }, // Mint - 예측/성장
-  benefits: { primary: '#0FFFFF', soft: '#E6FFFF', text: '#003262', border: '#0FFFFF' },   // Cyan - 혜택/정보
-  challenges: { primary: '#003262', soft: '#E6F4FF', text: '#FFFFFF', border: '#003262' }, // Navy - 챌린지
+// ===== 숫자 입력 유틸리티 함수 =====
+// Focus 시 0이면 빈 문자열로 (입력 편의)
+const handleNumberFocus = (e) => {
+  if (e.target.value === '0' || e.target.value === 0) {
+    e.target.value = '';
+  }
 };
 
-// ===== Main Colors =====
-const PRIMARY_COLOR = '#003262';    // Navy - 메인, 전문성, 신뢰
-const SECONDARY_COLOR = '#00FFBF';  // Mint - 성공, 성장, 수입
-const TERTIARY_COLOR = '#0FFFFF';   // Cyan - 하이라이트, 정보
-const ACCENT_COLOR = '#FFC591';     // Peach - 따뜻한 악센트, 보상
+// Blur 시 빈 문자열이면 0으로
+const handleNumberBlur = (e, setter, field) => {
+  if (e.target.value === '' || e.target.value === null) {
+    if (setter && field) {
+      setter(prev => ({ ...prev, [field]: 0 }));
+    }
+  }
+};
 
-// ===== Derived Colors (명도/채도 조정) =====
-const PRIMARY_LIGHT = '#004080';    // Navy 밝게
-const PRIMARY_DARK = '#001a40';     // Navy 어둡게
-const SECONDARY_LIGHT = '#66FFD9';  // Mint 밝게
-const SECONDARY_DARK = '#00CC99';   // Mint 어둡게
-const TERTIARY_LIGHT = '#66FFFF';   // Cyan 밝게
-const TERTIARY_DARK = '#00CCCC';    // Cyan 어둡게
-const ACCENT_LIGHT = '#FFD9B3';     // Peach 밝게
-const ACCENT_DARK = '#E6A060';      // Peach 어둡게
+// 금액 포맷팅 (소수점 반올림, 천단위 콤마)
+const formatAmount = (amount) => {
+  if (amount === null || amount === undefined) return '0';
+  return Math.round(amount).toLocaleString();
+};
 
-// ===== Semantic Colors =====
-const SUCCESS_COLOR = '#00FFBF';    // Mint
-const WARNING_COLOR = '#FFC591';    // Peach
-const ERROR_COLOR = '#FF6B6B';      // Red (Peach 계열 적색 변형)
-const INFO_COLOR = '#0FFFFF';       // Cyan
-
-// ===== Legacy aliases (하위 호환성) =====
-const ACCENT_GOLD = ACCENT_COLOR;   // → Peach
-const BRAND_COLOR = PRIMARY_COLOR;  // → Navy
-const PRIMARY_BLUE = PRIMARY_COLOR; // → Navy
-const SUCCESS_GREEN = SECONDARY_COLOR; // → Mint
-const NEON_ICE = TERTIARY_COLOR;    // → Cyan
+// 차트 색상 상수
+const CHART_COLORS = {
+  green: '#10B981',      // 차분한 초록 (emerald-500)
+  greenLight: '#34D399', // 밝은 초록 (emerald-400)
+  red: '#EF4444',        // 차분한 빨강 (red-500)
+  redLight: '#F87171',   // 밝은 빨강 (red-400)
+  danger: '#DC2626',     // D-day 강조색
+};
 
 const ReceiptFinancePlatform = () => {
   // Loading state for API calls
@@ -1283,9 +1299,24 @@ const ReceiptFinancePlatform = () => {
     insuranceHealth: 0,
     insuranceEmployment: 0,
     housingDeduction: 0,
+    // 2025년 신규: 신용카드 소득공제
+    creditCardTotal: 0, // 간단 입력용 총액
+    creditCardAmount: 0,
+    debitCardAmount: 0,
+    cashReceiptAmount: 0,
+    traditionalMarketAmount: 0,
+    publicTransportAmount: 0,
+    cultureAmount: 0,
+    sportsAmount: 0,
+    previousYearCardTotal: 0, // 전년도 사용액 (소비증가분 계산)
+    // 2025년 신규: 월세 세액공제
+    annualRent: 0,
+    isHomeOwner: false,
+    housingSize: 85,
   });
 
   const [taxSimulatorResult, setTaxSimulatorResult] = useState(null);
+  const [autoCalculateFlag, setAutoCalculateFlag] = useState(false);
 
   // 연말정산 계산
   const calculateTaxSimulation = () => {
@@ -1323,6 +1354,44 @@ const ReceiptFinancePlatform = () => {
     };
     const childDependents = taxSimulatorData.childDependents || taxSimulatorData.dependents || 0;
 
+    // 2025년 신규: 신용카드 소득공제 계산
+    const hasAdvancedCardInput = (taxSimulatorData.creditCardAmount || 0) > 0 ||
+      (taxSimulatorData.debitCardAmount || 0) > 0 ||
+      (taxSimulatorData.cashReceiptAmount || 0) > 0;
+
+    const creditCardResult = hasAdvancedCardInput
+      ? calculateCreditCardDeduction({
+          annualIncome: taxSimulatorData.annualIncome,
+          creditCardAmount: taxSimulatorData.creditCardAmount || 0,
+          debitCardAmount: taxSimulatorData.debitCardAmount || 0,
+          cashReceiptAmount: taxSimulatorData.cashReceiptAmount || 0,
+          traditionalMarketAmount: taxSimulatorData.traditionalMarketAmount || 0,
+          publicTransportAmount: taxSimulatorData.publicTransportAmount || 0,
+          cultureAmount: taxSimulatorData.cultureAmount || 0,
+          sportsAmount: taxSimulatorData.sportsAmount || 0,
+          previousYearTotal: taxSimulatorData.previousYearCardTotal || 0,
+        })
+      : taxSimulatorData.creditCardTotal > 0
+        ? calculateCreditCardDeduction({
+            annualIncome: taxSimulatorData.annualIncome,
+            creditCardAmount: taxSimulatorData.creditCardTotal * 0.6, // 추정 비율
+            debitCardAmount: taxSimulatorData.creditCardTotal * 0.3,
+            cashReceiptAmount: taxSimulatorData.creditCardTotal * 0.1,
+          })
+        : null;
+
+    // 2025년 신규: 월세 세액공제 계산
+    const rentResult = taxSimulatorData.annualRent > 0
+      ? calculateRentTaxCredit({
+          annualRent: taxSimulatorData.annualRent,
+          annualIncome: taxSimulatorData.annualIncome,
+          isHomeOwner: taxSimulatorData.isHomeOwner,
+          housingSize: taxSimulatorData.housingSize || 85,
+        })
+      : null;
+
+    const creditCardDeduction = creditCardResult?.totalDeduction || 0;
+
     const result = calculateIndividualTax({
       annualIncome: taxSimulatorData.annualIncome,
       dependents: taxSimulatorData.dependents,
@@ -1339,9 +1408,27 @@ const ReceiptFinancePlatform = () => {
       housingDeduction: taxSimulatorData.housingDeduction || 0,
       hasInfertility,
       childDependents,
+      creditCardDeduction,
     });
+
+    // 신용카드 공제 + 월세 세액공제 반영
+    const rentCredit = rentResult?.credit || 0;
+    const adjustedTaxCredits = result.taxCredits + rentCredit;
+    const adjustedFinalTax = Math.max(0, result.calculatedTax - adjustedTaxCredits - result.earnedIncomeTaxCredit);
+    const adjustedLocalTax = Math.floor(adjustedFinalTax * 0.10);
+    const adjustedTotalTax = adjustedFinalTax + adjustedLocalTax;
+
     setTaxSimulatorResult({
       ...result,
+      // 신용카드 공제는 소득공제라 과세표준에 영향
+      creditCardDeduction,
+      rentCredit,
+      taxCredits: adjustedTaxCredits,
+      finalTax: adjustedFinalTax,
+      localTax: adjustedLocalTax,
+      totalTax: adjustedTotalTax,
+      effectiveRate: taxSimulatorData.annualIncome > 0 ? (adjustedTotalTax / taxSimulatorData.annualIncome * 100).toFixed(2) : 0,
+      monthlyTax: Math.ceil(adjustedTotalTax / 12),
       meta: {
         medicalTotal,
         educationExpenses,
@@ -1349,9 +1436,114 @@ const ReceiptFinancePlatform = () => {
         insurancePremiums,
         hasInfertility,
         childDependents,
+        creditCardResult,
+        rentResult,
       },
     });
   };
+
+  // 앱 DB에서 데이터 불러오기
+  const loadFromAppData = () => {
+    // 영수증 데이터에서 카테고리별 합계 계산
+    const categoryTotals = receipts.reduce((acc, r) => {
+      const cat = r.category || '기타';
+      acc[cat] = (acc[cat] || 0) + (r.amount || 0);
+      return acc;
+    }, {});
+
+    // 카테고리 매핑 (영수증 카테고리 → 세금 공제 항목)
+    const medicalCategories = ['병원', '약국', '의료', '건강'];
+    const educationCategories = ['교육', '학원', '학비', '수업료'];
+    const donationCategories = ['기부', '후원', '봉사'];
+    const transportCategories = ['대중교통', '교통', '버스', '지하철'];
+
+    const medicalTotal = Object.entries(categoryTotals)
+      .filter(([cat]) => medicalCategories.some(mc => cat.includes(mc)))
+      .reduce((sum, [, amt]) => sum + amt, 0);
+
+    const educationTotal = Object.entries(categoryTotals)
+      .filter(([cat]) => educationCategories.some(ec => cat.includes(ec)))
+      .reduce((sum, [, amt]) => sum + amt, 0);
+
+    const donationTotal = Object.entries(categoryTotals)
+      .filter(([cat]) => donationCategories.some(dc => cat.includes(dc)))
+      .reduce((sum, [, amt]) => sum + amt, 0);
+
+    const transportTotal = Object.entries(categoryTotals)
+      .filter(([cat]) => transportCategories.some(tc => cat.includes(tc)))
+      .reduce((sum, [, amt]) => sum + amt, 0);
+
+    // 총 지출 (카드 사용액 추정)
+    const totalSpending = receipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    // 4대보험 자동 계산
+    const monthlyIncome = Math.floor(taxBasicInfo.annualIncome / 12);
+    const insuranceResult = calculateAnnualInsurancePremiums(monthlyIncome);
+
+    // taxSimulatorData 업데이트
+    setTaxSimulatorData({
+      annualIncome: taxBasicInfo.annualIncome || 50000000,
+      dependents: taxBasicInfo.dependents || 0,
+      childDependents: taxBasicInfo.childDependents || 0,
+      hasSpouse: taxBasicInfo.hasSpouse || false,
+      medicalExpenses: medicalTotal,
+      medicalGeneral: medicalTotal,
+      medicalInfertility: 0,
+      medicalSenior: 0,
+      educationTotal: educationTotal,
+      educationSelf: 0,
+      educationChild: educationTotal,
+      educationUniversity: 0,
+      pensionSavings: 0,
+      irpAmount: 0,
+      donationsSimple: donationTotal,
+      donationsLegal: 0,
+      donationsDesignated: donationTotal,
+      donationsReligious: 0,
+      donationsPolitical: 0,
+      insuranceNational: insuranceResult.annualPension,
+      insuranceHealth: insuranceResult.annualHealth + insuranceResult.annualLongTermCare,
+      insuranceEmployment: insuranceResult.annualEmployment,
+      housingDeduction: 0,
+      creditCardTotal: totalSpending,
+      creditCardAmount: Math.round(totalSpending * 0.6),
+      debitCardAmount: Math.round(totalSpending * 0.3),
+      cashReceiptAmount: Math.round(totalSpending * 0.1),
+      traditionalMarketAmount: 0,
+      publicTransportAmount: transportTotal,
+      cultureAmount: 0,
+      sportsAmount: 0,
+      previousYearCardTotal: 0,
+      annualRent: 0,
+      isHomeOwner: false,
+      housingSize: 85,
+    });
+
+    // 자동 계산 플래그 설정 (useEffect에서 계산 트리거)
+    setAutoCalculateFlag(true);
+  };
+
+  // 4대보험 자동 계산 (연봉 변경 시 자동 적용)
+  useEffect(() => {
+    if (taxSimulatorData.annualIncome > 0) {
+      const monthlyIncome = Math.floor(taxSimulatorData.annualIncome / 12);
+      const insuranceResult = calculateAnnualInsurancePremiums(monthlyIncome);
+      setTaxSimulatorData(prev => ({
+        ...prev,
+        insuranceNational: insuranceResult.annualPension,
+        insuranceHealth: insuranceResult.annualHealth + insuranceResult.annualLongTermCare,
+        insuranceEmployment: insuranceResult.annualEmployment,
+      }));
+    }
+  }, [taxSimulatorData.annualIncome]);
+
+  // 자동 계산 트리거 (데이터 불러오기 후)
+  useEffect(() => {
+    if (autoCalculateFlag) {
+      calculateTaxSimulation();
+      setAutoCalculateFlag(false);
+    }
+  }, [autoCalculateFlag]);
 
   const chartPalette = useMemo(() => [
     activeTheme.primary,
@@ -1566,7 +1758,7 @@ const ReceiptFinancePlatform = () => {
                       {insight.potentialSaving > 0 && (
                         <div className="mt-2 flex items-center gap-2">
                           <span className="text-lg font-bold text-green-600">
-                            +₩{insight.potentialSaving.toLocaleString()}
+                            +{insight.potentialSaving.toLocaleString()}원
                           </span>
                           <span className="text-xs text-gray-600">절감 가능</span>
                         </div>
@@ -1739,7 +1931,7 @@ const ReceiptFinancePlatform = () => {
                 status: detailedTaxHealthScores.savingsPotential.status,
                 color: detailedTaxHealthScores.savingsPotential.statusColor,
                 icon: Target,
-                tooltip: `추가 절세 가능: ₩${detailedTaxHealthScores.savingsPotential.totalPotentialSavings.toLocaleString()}`,
+                tooltip: `추가 절세 가능: ${detailedTaxHealthScores.savingsPotential.totalPotentialSavings.toLocaleString()}원`,
               },
             ].map((cat, idx) => {
               const Icon = cat.icon;
@@ -1802,17 +1994,17 @@ const ReceiptFinancePlatform = () => {
           <div className="grid md:grid-cols-3 gap-4">
             <div className="bg-white/70 rounded-lg p-4">
               <div className="text-sm mb-1" style={{ color: PRIMARY_BLUE }}>예상 환급액</div>
-              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>₩{((stats.taxEstimate || 0) * 0.15).toLocaleString()}</div>
+              <div className="text-2xl font-bold text-right tabular-nums" style={{ color: BRAND_COLOR }}>{Math.round((stats.taxEstimate || 0) * 0.15).toLocaleString()}원</div>
               <div className="text-xs mt-1" style={{ color: PRIMARY_BLUE }}>공제 활용 시 예상</div>
             </div>
             <div className="bg-white/70 rounded-lg p-4">
               <div className="text-sm mb-1" style={{ color: PRIMARY_BLUE }}>공제 가능 총액</div>
-              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>₩{Object.values(deductionTracker).reduce((sum, d) => sum + d.current, 0).toLocaleString()}</div>
+              <div className="text-2xl font-bold text-right tabular-nums" style={{ color: BRAND_COLOR }}>{Object.values(deductionTracker).reduce((sum, d) => sum + d.current, 0).toLocaleString()}원</div>
               <div className="text-xs mt-1" style={{ color: PRIMARY_BLUE }}>{Object.keys(deductionTracker).length}개 항목</div>
             </div>
             <div className="bg-white/70 rounded-lg p-4">
               <div className="text-sm mb-1" style={{ color: PRIMARY_BLUE }}>신고 마감까지</div>
-              <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>D-{Math.max(0, Math.floor((new Date('2026-02-28') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
+              <div className="text-2xl font-bold text-right tabular-nums" style={{ color: CHART_COLORS.danger }}>D-{Math.max(0, Math.floor((new Date('2026-02-28') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
               <div className="text-xs mt-1" style={{ color: PRIMARY_BLUE }}>연말정산 마감</div>
             </div>
           </div>
@@ -1821,17 +2013,17 @@ const ReceiptFinancePlatform = () => {
           <div className="grid md:grid-cols-3 gap-4">
             <div className="bg-white/70 rounded-lg p-4">
               <div className="text-sm mb-1" style={{ color: BRAND_COLOR }}>예상 종합소득세</div>
-              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>₩{(stats.taxEstimate || 0).toLocaleString()}</div>
+              <div className="text-2xl font-bold text-right tabular-nums" style={{ color: BRAND_COLOR }}>{(stats.taxEstimate || 0).toLocaleString()}원</div>
               <div className="text-xs mt-1" style={{ color: BRAND_COLOR, opacity: 0.7 }}>올해 예상 납부액</div>
             </div>
             <div className="bg-white/70 rounded-lg p-4">
               <div className="text-sm mb-1" style={{ color: BRAND_COLOR }}>이번 달 매출</div>
-              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>₩{stats.totalSpent.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-right tabular-nums" style={{ color: BRAND_COLOR }}>{stats.totalSpent.toLocaleString()}원</div>
               <div className="text-xs mt-1" style={{ color: BRAND_COLOR, opacity: 0.7 }}>지출 기준</div>
             </div>
             <div className="bg-white/70 rounded-lg p-4">
               <div className="text-sm mb-1" style={{ color: BRAND_COLOR }}>부가세 신고까지</div>
-              <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>D-{Math.max(0, Math.floor((new Date('2026-01-25') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
+              <div className="text-2xl font-bold text-right tabular-nums" style={{ color: CHART_COLORS.danger }}>D-{Math.max(0, Math.floor((new Date('2026-01-25') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
               <div className="text-xs mt-1" style={{ color: BRAND_COLOR, opacity: 0.7 }}>2기 확정신고</div>
             </div>
           </div>
@@ -1880,20 +2072,20 @@ const ReceiptFinancePlatform = () => {
 
                 <div className="mb-2">
                   <div className="flex justify-between text-sm mb-1">
-                    <span>₩{item.current.toLocaleString()}</span>
-                    <span className="text-gray-500">/ ₩{item.maxDeduction.toLocaleString()}</span>
+                    <span>{formatAmount(item.current)}원</span>
+                    <span className="text-gray-500">/ {formatAmount(item.maxDeduction)}원</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className={`h-2 rounded-full bg-${item.color}-500`}
-                      style={{ width: `${Math.min(progress, 100)}%` }}
+                      className="h-2 rounded-full"
+                      style={{ width: `${Math.min(progress, 100)}%`, backgroundColor: CHART_COLORS.green }}
                     />
                   </div>
                 </div>
 
                 {item.potentialSaving > 0 && (
-                  <div className="text-xs text-green-600 font-semibold">
-                    +₩{item.potentialSaving.toLocaleString()} 추가 가능
+                  <div className="text-xs text-gray-700 font-medium text-right">
+                    +{formatAmount(item.potentialSaving)}원 추가 가능
                   </div>
                 )}
               </div>
@@ -1927,7 +2119,7 @@ const ReceiptFinancePlatform = () => {
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-indigo-600 font-medium">예상 추가 절세:</span>
-                    <span className="text-sm font-bold text-green-600">+₩{Math.round((500000 - (deductionTracker.medical?.current || 0)) * 0.15).toLocaleString()}</span>
+                    <span className="text-sm font-bold text-green-600">+{Math.round((500000 - (deductionTracker.medical?.current || 0)) * 0.15).toLocaleString()}원</span>
                   </div>
                 </div>
               </div>
@@ -1951,7 +2143,7 @@ const ReceiptFinancePlatform = () => {
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-indigo-600 font-medium">예상 추가 절세:</span>
-                    <span className="text-sm font-bold text-green-600">+₩{Math.round((1000000 - (deductionTracker.education?.current || 0)) * 0.15).toLocaleString()}</span>
+                    <span className="text-sm font-bold text-green-600">+{Math.round((1000000 - (deductionTracker.education?.current || 0)) * 0.15).toLocaleString()}원</span>
                   </div>
                 </div>
               </div>
@@ -1975,7 +2167,7 @@ const ReceiptFinancePlatform = () => {
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-indigo-600 font-medium">예상 추가 절세:</span>
-                    <span className="text-sm font-bold text-green-600">+₩{Math.round((3000000 - (deductionTracker.housing?.current || 0)) * 0.12).toLocaleString()}</span>
+                    <span className="text-sm font-bold text-green-600">+{Math.round((3000000 - (deductionTracker.housing?.current || 0)) * 0.12).toLocaleString()}원</span>
                   </div>
                 </div>
               </div>
@@ -1998,7 +2190,7 @@ const ReceiptFinancePlatform = () => {
                 </p>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-indigo-600 font-medium">연간 최대 절세:</span>
-                  <span className="text-sm font-bold text-green-600">+₩1,155,000</span>
+                  <span className="text-sm font-bold text-green-600">+1,155,000원</span>
                 </div>
               </div>
             </div>
@@ -2060,7 +2252,7 @@ const ReceiptFinancePlatform = () => {
             <Wallet className="w-5 h-5" />
             <span className="text-xs bg-white/20 px-2 py-1 rounded-full">이번 달</span>
           </div>
-          <div className="text-2xl font-bold">₩{stats.totalSpent.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-right tabular-nums">{stats.totalSpent.toLocaleString()}원</div>
           <div className="text-xs opacity-80">총 지출</div>
         </div>
 
@@ -2069,7 +2261,7 @@ const ReceiptFinancePlatform = () => {
             <TrendingUp className="w-5 h-5" />
             <span className="text-xs bg-white/30 px-2 py-1 rounded-full">절감액</span>
           </div>
-          <div className="text-2xl font-bold">₩{Math.floor(userProfile.totalSaved / 1000)}K</div>
+          <div className="text-2xl font-bold text-right tabular-nums">{Math.floor(userProfile.totalSaved / 1000)}천원</div>
           <div className="text-xs opacity-80">누적 절감</div>
         </div>
 
@@ -2078,7 +2270,7 @@ const ReceiptFinancePlatform = () => {
             <Trophy className="w-5 h-5" />
             <span className="text-xs bg-white/20 px-2 py-1 rounded-full">배지</span>
           </div>
-          <div className="text-2xl font-bold">{userProfile.badges.length}개</div>
+          <div className="text-2xl font-bold text-right tabular-nums">{userProfile.badges.length}개</div>
           <div className="text-xs opacity-80">획득 완료</div>
         </div>
 
@@ -2087,7 +2279,7 @@ const ReceiptFinancePlatform = () => {
             <Gift className="w-5 h-5" />
             <span className="text-xs bg-white/30 px-2 py-1 rounded-full">포인트</span>
           </div>
-          <div className="text-2xl font-bold">{userProfile.points.toLocaleString()}P</div>
+          <div className="text-2xl font-bold text-right tabular-nums">{userProfile.points.toLocaleString()}P</div>
           <div className="text-xs opacity-80">사용 가능</div>
         </div>
       </div>
@@ -2112,7 +2304,7 @@ const ReceiptFinancePlatform = () => {
                   <Cell key={`cell-${index}`} fill={chartPalette[index % chartPalette.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value) => `₩${value.toLocaleString()}`} />
+              <Tooltip formatter={(value) => `${value.toLocaleString()}원`} />
             </RechartsPie>
           </ResponsiveContainer>
         ) : (
@@ -2203,11 +2395,11 @@ const ReceiptFinancePlatform = () => {
                 <div className="flex items-center justify-between pt-3 border-t border-gray-200">
                   <div>
                     <div className="text-xs text-gray-500">이번 달</div>
-                    <div className="font-bold text-sm">₩{(account.monthly_spent || account.monthlySpent || 0).toLocaleString()}</div>
+                    <div className="font-bold text-sm text-right tabular-nums">{(account.monthly_spent || account.monthlySpent || 0).toLocaleString()}원</div>
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-gray-500">거래</div>
-                    <div className="font-bold text-sm">{account.transaction_count || account.transactionCount || 0}건</div>
+                    <div className="font-bold text-sm tabular-nums">{account.transaction_count || account.transactionCount || 0}건</div>
                   </div>
                 </div>
                 <button
@@ -2414,8 +2606,8 @@ const ReceiptFinancePlatform = () => {
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <div className="font-bold text-lg">₩{(transaction.amount || 0).toLocaleString()}</div>
-                  <div className="text-xs text-gray-500">VAT ₩{(transaction.tax || 0).toLocaleString()}</div>
+                  <div className="font-bold text-lg tabular-nums">{(transaction.amount || 0).toLocaleString()}원</div>
+                  <div className="text-xs text-gray-500 tabular-nums">VAT {(transaction.tax || 0).toLocaleString()}원</div>
                 </div>
                 <button
                   onClick={(e) => {
@@ -2547,10 +2739,10 @@ const ReceiptFinancePlatform = () => {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="month" />
             <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
-            <Tooltip formatter={(v) => `₩${v.toLocaleString()}`} />
+            <Tooltip formatter={(v) => `${v.toLocaleString()}원`} />
             <Legend />
-            <Area type="monotone" dataKey="지출" stroke={activeTheme.primary} fill={activeTheme.soft} fillOpacity={0.6} />
-            <Area type="monotone" dataKey="예산" stroke={ACCENT_GOLD} fill={ACCENT_GOLD} fillOpacity={0.3} />
+            <Area type="monotone" dataKey="지출" stroke={CHART_COLORS.red} fill={CHART_COLORS.redLight} fillOpacity={0.4} />
+            <Area type="monotone" dataKey="예산" stroke={CHART_COLORS.green} fill={CHART_COLORS.greenLight} fillOpacity={0.4} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -2564,12 +2756,12 @@ const ReceiptFinancePlatform = () => {
               </div>
               <div className="flex gap-4 text-sm">
                 <span className="flex items-center gap-1">
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: ACCENT_GOLD }}></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: CHART_COLORS.green }}></div>
                   예산
                 </span>
                 <span className="flex items-center gap-1">
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: activeTheme.primary }}></div>
-                  실제
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: CHART_COLORS.red }}></div>
+                  실제 지출
                 </span>
               </div>
             </div>
@@ -2578,46 +2770,46 @@ const ReceiptFinancePlatform = () => {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="category" tick={{ fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={60} />
             <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
-            <Tooltip formatter={(v) => `₩${v.toLocaleString()}`} />
+            <Tooltip formatter={(v) => `${v.toLocaleString()}원`} />
             <Legend />
-            <Bar dataKey="예산" fill={ACCENT_GOLD} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="실제" fill={activeTheme.primary} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="예산" fill={CHART_COLORS.green} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="실제" fill={CHART_COLORS.red} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       {/* 절약/초과 요약 */}
       <div className="grid md:grid-cols-3 gap-4">
-        <div className="rounded-xl p-4 border" style={{ backgroundColor: activeTheme.soft, borderColor: activeTheme.soft }}>
+        <div className="rounded-xl p-4 border" style={{ backgroundColor: `${CHART_COLORS.green}15`, borderColor: `${CHART_COLORS.green}40` }}>
           <div className="flex items-center gap-2 mb-2">
-            <TrendingDown className="w-5 h-5" style={{ color: activeTheme.primary }} />
-            <span className="font-semibold" style={{ color: activeTheme.primary }}>절약한 항목</span>
+            <TrendingDown className="w-5 h-5" style={{ color: CHART_COLORS.green }} />
+            <span className="font-semibold" style={{ color: CHART_COLORS.green }}>절약한 항목</span>
           </div>
-          <div className="text-2xl font-bold" style={{ color: activeTheme.primary }}>
+          <div className="text-2xl font-bold" style={{ color: CHART_COLORS.green }}>
             {budgetComparisonData.filter(d => d.차이 > 0).length}개
           </div>
-          <div className="text-sm mt-1" style={{ color: activeTheme.primary }}>
-            총 ₩{budgetComparisonData.filter(d => d.차이 > 0).reduce((sum, d) => sum + d.차이, 0).toLocaleString()} 절약
+          <div className="text-sm mt-1" style={{ color: CHART_COLORS.green }}>
+            총 {budgetComparisonData.filter(d => d.차이 > 0).reduce((sum, d) => sum + d.차이, 0).toLocaleString()}원 절약
           </div>
         </div>
-        <div className="rounded-xl p-4 border" style={{ backgroundColor: 'rgba(255, 215, 0, 0.16)', borderColor: 'rgba(255, 215, 0, 0.4)' }}>
+        <div className="rounded-xl p-4 border" style={{ backgroundColor: `${CHART_COLORS.red}15`, borderColor: `${CHART_COLORS.red}40` }}>
           <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-5 h-5" style={{ color: ACCENT_GOLD }} />
-            <span className="font-semibold" style={{ color: ACCENT_GOLD }}>초과한 항목</span>
+            <TrendingUp className="w-5 h-5" style={{ color: CHART_COLORS.red }} />
+            <span className="font-semibold" style={{ color: CHART_COLORS.red }}>초과한 항목</span>
           </div>
-          <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>
+          <div className="text-2xl font-bold" style={{ color: CHART_COLORS.red }}>
             {budgetComparisonData.filter(d => d.차이 < 0).length}개
           </div>
-          <div className="text-sm mt-1" style={{ color: ACCENT_GOLD }}>
-            총 ₩{Math.abs(budgetComparisonData.filter(d => d.차이 < 0).reduce((sum, d) => sum + d.차이, 0)).toLocaleString()} 초과
+          <div className="text-sm mt-1" style={{ color: CHART_COLORS.red }}>
+            총 {Math.abs(budgetComparisonData.filter(d => d.차이 < 0).reduce((sum, d) => sum + d.차이, 0)).toLocaleString()}원 초과
           </div>
         </div>
         <div className="rounded-xl p-4 border" style={{ backgroundColor: activeTheme.soft, borderColor: activeTheme.border }}>
           <div className="flex items-center gap-2 mb-2">
-            <Activity className="w-5 h-5" style={{ color: SUCCESS_GREEN }} />
+            <Activity className="w-5 h-5" style={{ color: CHART_COLORS.green }} />
             <span className="font-semibold" style={{ color: BRAND_COLOR }}>예산 달성률</span>
           </div>
-          <div className="text-2xl font-bold" style={{ color: SUCCESS_GREEN }}>
+          <div className="text-2xl font-bold" style={{ color: CHART_COLORS.green }}>
             {Math.round((budgetComparisonData.filter(d => d.차이 >= 0).length / Math.max(budgetComparisonData.length, 1)) * 100)}%
           </div>
           <div className="text-sm mt-1" style={{ color: BRAND_COLOR }}>
@@ -2630,24 +2822,40 @@ const ReceiptFinancePlatform = () => {
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <h3 className="font-bold text-lg mb-4">예산 사용 상세</h3>
         <div className="space-y-4">
-          {stats.budgetUsage.map((item, idx) => (
+          {stats.budgetUsage.map((item, idx) => {
+            const pct = parseFloat(item.percentage);
+            const barColor = pct > 90 ? CHART_COLORS.red : pct > 70 ? CHART_COLORS.redLight : CHART_COLORS.green;
+            return (
             <div key={idx} className="border-b pb-4 last:border-b-0">
               <div className="flex justify-between items-start mb-2">
                 <div className="flex-1">
                   <div className="font-semibold">{item.category}</div>
-                  <div className="text-sm text-gray-600">
-                    현재 지출: ₩{item.spent.toLocaleString()}
+                  <div className="text-sm" style={{ color: CHART_COLORS.red }}>
+                    현재 지출: {item.spent.toLocaleString()}원
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500">예산:</span>
+                  <span className="text-sm" style={{ color: CHART_COLORS.green }}>예산:</span>
                   <input
                     type="text"
-                    className="w-28 px-2 py-1 text-right border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={(budgets[item.category] || item.budget).toLocaleString()}
-                    onChange={(e) => {
+                    className="w-28 px-2 py-1 text-right border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2"
+                    style={{ borderColor: CHART_COLORS.greenLight }}
+                    defaultValue={(budgets[item.category] || item.budget).toLocaleString()}
+                    onFocus={(e) => {
+                      e.target.value = (budgets[item.category] || item.budget).toString();
+                      e.target.select();
+                      // 스크롤 점프 방지
+                      e.preventDefault();
+                    }}
+                    onBlur={(e) => {
                       const value = parseInt(e.target.value.replace(/,/g, '')) || 0;
                       setBudgets({ ...budgets, [item.category]: value });
+                      e.target.value = value.toLocaleString();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.target.blur();
+                      }
                     }}
                     placeholder="예산 입력"
                   />
@@ -2657,22 +2865,23 @@ const ReceiptFinancePlatform = () => {
               <div className="flex items-center gap-3 mt-2">
                 <div className="flex-1 bg-gray-200 rounded-full h-3">
                   <div
-                    className={`h-3 rounded-full transition-all ${parseFloat(item.percentage) > 90 ? 'bg-red-500' :
-                      parseFloat(item.percentage) > 70 ? 'bg-orange-500' :
-                        'bg-green-500'
-                      }`}
-                    style={{ width: `${Math.min(parseFloat(item.percentage), 100)}%` }}
+                    className="h-3 rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(pct, 100)}%`,
+                      backgroundColor: barColor
+                    }}
                   />
                 </div>
-                <div className={`text-lg font-bold min-w-[50px] text-right ${parseFloat(item.percentage) > 90 ? 'text-red-500' :
-                  parseFloat(item.percentage) > 70 ? 'text-orange-500' :
-                    'text-green-500'
-                  }`}>
+                <div
+                  className="text-lg font-bold min-w-[50px] text-right"
+                  style={{ color: barColor }}
+                >
                   {item.percentage}%
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -2724,10 +2933,153 @@ const ReceiptFinancePlatform = () => {
   const calcRefund = calculateSimpleRefund();
   const creditCardRatio = calcIncome > 0 ? ((calcCreditCard / calcIncome) * 100).toFixed(1) : 0;
 
+  // 실제 데이터 기반 월별 세금 예측 계산 (복합형)
+  const calculatedTaxData = useMemo(() => {
+    const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+    const currentMonth = new Date().getMonth(); // 0-11
+    const annualIncome = taxBasicInfo.annualIncome || 50000000;
+
+    // 월별 소득 변동 패턴 (한국 직장인: 1월 성과급, 6월 상여, 12월 연말 보너스)
+    const incomePattern = [1.15, 1.0, 1.0, 1.0, 1.0, 1.1, 1.0, 1.0, 1.0, 1.0, 1.0, 1.2];
+    const totalPattern = incomePattern.reduce((a, b) => a + b, 0);
+
+    // 영수증 데이터를 월별로 그룹화
+    const monthlyExpenses = {};
+    const categoryTotals = {};
+
+    receipts.forEach(r => {
+      const date = new Date(r.date);
+      const monthIdx = date.getMonth();
+      const category = r.category || '기타';
+
+      if (!monthlyExpenses[monthIdx]) {
+        monthlyExpenses[monthIdx] = { total: 0, categories: {} };
+      }
+      monthlyExpenses[monthIdx].total += r.amount || 0;
+      monthlyExpenses[monthIdx].categories[category] =
+        (monthlyExpenses[monthIdx].categories[category] || 0) + (r.amount || 0);
+
+      categoryTotals[category] = (categoryTotals[category] || 0) + (r.amount || 0);
+    });
+
+    // 카테고리별 연간 누적 (공제 계산용)
+    const medicalCategories = ['병원', '약국', '의료', '건강'];
+    const educationCategories = ['교육', '학원', '학비'];
+
+    const annualMedical = Object.entries(categoryTotals)
+      .filter(([cat]) => medicalCategories.some(mc => cat.includes(mc)))
+      .reduce((sum, [, amt]) => sum + amt, 0);
+
+    const annualEducation = Object.entries(categoryTotals)
+      .filter(([cat]) => educationCategories.some(ec => cat.includes(ec)))
+      .reduce((sum, [, amt]) => sum + amt, 0);
+
+    const totalCardUsage = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
+
+    // 공제 적용 세금 계산
+    const taxWithDeductions = calculateIndividualTax({
+      annualIncome,
+      dependents: taxBasicInfo.dependents || 0,
+      hasSpouse: taxBasicInfo.hasSpouse || false,
+      medicalExpenses: annualMedical,
+      educationExpenses: { self: annualEducation },
+      creditCardDeduction: totalCardUsage > annualIncome * 0.25
+        ? Math.min((totalCardUsage - annualIncome * 0.25) * 0.15, 3000000)
+        : 0,
+    });
+
+    // 공제 미적용 세금 계산 (비교용)
+    const taxWithoutDeductions = calculateIndividualTax({
+      annualIncome,
+      dependents: 0,
+      hasSpouse: false,
+    });
+
+    // 사업자용 계산
+    const businessTax = userType === 'business' ? calculateBusinessTax({
+      revenue: taxBasicInfo.expectedRevenue || annualIncome,
+      expenses: taxBasicInfo.expectedExpenses || annualIncome * 0.6,
+      isSimplifiedTax: taxBasicInfo.isSimplifiedTax || false,
+    }) : null;
+
+    // 사업자 경비공제 미적용 세금 계산 (비교용)
+    const businessTaxNoDeduction = userType === 'business' ? calculateBusinessTax({
+      revenue: taxBasicInfo.expectedRevenue || annualIncome,
+      expenses: 0,
+      isSimplifiedTax: taxBasicInfo.isSimplifiedTax || false,
+    }) : null;
+
+    // 누적 변수
+    let cumulativeTax = 0;
+    let cumulativeNoDeduction = 0;
+    let cumulativeExpense = 0;
+
+    // 월별 데이터 생성
+    return months.map((month, idx) => {
+      const isPast = idx <= currentMonth;
+      const monthData = monthlyExpenses[idx] || { total: 0, categories: {} };
+
+      if (userType === 'individual') {
+        // 월별 소득에 따른 세금 비율 적용
+        const monthRatio = incomePattern[idx] / totalPattern;
+        const monthlyTax = Math.floor(taxWithDeductions.totalTax * monthRatio);
+        const monthlyTaxNoDeduction = Math.floor(taxWithoutDeductions.totalTax * monthRatio);
+
+        // 실제 지출이 있으면 해당 값 사용, 없으면 예상 지출 패턴
+        const actualExpense = monthData.total || Math.floor(annualIncome * 0.05 * (0.8 + Math.random() * 0.4));
+
+        cumulativeTax += monthlyTax;
+        cumulativeNoDeduction += monthlyTaxNoDeduction;
+        cumulativeExpense += actualExpense;
+
+        return {
+          month,
+          monthlyTax: isPast ? monthlyTax : 0,
+          predictedTax: !isPast ? monthlyTax : 0,
+          cumulativeTax: isPast ? cumulativeTax : null,
+          predictedCumulative: cumulativeTax,
+          noDeductionTax: monthlyTaxNoDeduction,
+          savings: monthlyTaxNoDeduction - monthlyTax,
+          expense: actualExpense,
+          cumulativeExpense,
+          isPast,
+        };
+      } else {
+        // 사업자: 분기별 납부 패턴
+        const isQuarterMonth = [0, 3, 6, 9].includes(idx);
+        const quarterlyTax = isQuarterMonth && businessTax ? businessTax.quarterlyTax : 0;
+        const quarterlyTaxNoDeduction = isQuarterMonth && businessTaxNoDeduction ? businessTaxNoDeduction.quarterlyTax : 0;
+        const monthlyRevenue = taxBasicInfo.expectedRevenue ? Math.floor(taxBasicInfo.expectedRevenue / 12) : 0;
+        const monthlyExp = monthData.total || (taxBasicInfo.expectedExpenses ? Math.floor(taxBasicInfo.expectedExpenses / 12) : 0);
+
+        cumulativeTax += quarterlyTax;
+        cumulativeNoDeduction += quarterlyTaxNoDeduction;
+        cumulativeExpense += monthlyExp;
+
+        return {
+          month,
+          monthlyTax: isPast ? quarterlyTax : 0,
+          predictedTax: !isPast ? quarterlyTax : 0,
+          cumulativeTax: isPast ? cumulativeTax : null,
+          predictedCumulative: cumulativeTax,
+          noDeductionTax: quarterlyTaxNoDeduction,
+          savings: quarterlyTaxNoDeduction - quarterlyTax,
+          income: monthlyRevenue,
+          expense: monthlyExp,
+          cumulativeExpense,
+          vat: isQuarterMonth && businessTax ? Math.floor(businessTax.vat / 4) : 0,
+          isPast,
+        };
+      }
+    });
+  }, [receipts, taxBasicInfo, userType]);
+
   const TaxPredictionView = () => {
-    const taxData = userType === 'individual' ? individualTaxData : businessTaxData;
-    const totalPredictedTax = taxData.slice(5).reduce((sum, d) => sum + d.predicted, 0);
-    const totalActualTax = taxData.slice(0, 5).reduce((sum, d) => sum + d.actual, 0);
+    // DB 데이터 대신 실제 계산된 데이터 사용
+    const taxData = calculatedTaxData;
+    const currentMonth = new Date().getMonth();
+    const totalActualTax = taxData.slice(0, currentMonth + 1).reduce((sum, d) => sum + (d.monthlyTax || 0), 0);
+    const totalPredictedTax = taxData.slice(currentMonth + 1).reduce((sum, d) => sum + (d.predictedTax || 0), 0);
 
     return (
       <div className="space-y-6">
@@ -2952,45 +3304,126 @@ const ReceiptFinancePlatform = () => {
           </div>
         </div>
 
-        {/* Tax Prediction Chart */}
+        {/* Tax Prediction Chart - 복합형 */}
         <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="font-bold text-lg mb-4">
-            {userType === 'individual' ? '월별 세금 예상 (개인)' : '월별 세금 예상 (사업자)'}
-          </h3>
-          <ResponsiveContainer width="100%" height={350}>
-            <AreaChart data={taxData}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-lg">
+              {userType === 'individual' ? '월별 세금 분석 (개인)' : '월별 세금 분석 (사업자)'}
+            </h3>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full">실시간 계산</span>
+              <span>영수증 {receipts.length}건 반영</span>
+            </div>
+          </div>
+
+          {/* 범례 설명 */}
+          <div className="flex flex-wrap gap-4 mb-4 text-xs">
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded" style={{ backgroundColor: activeTheme.primary }}></span>
+              납부 세금 (막대)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded" style={{ backgroundColor: ACCENT_GOLD }}></span>
+              예상 세금 (막대)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-6 h-0.5" style={{ backgroundColor: CHART_COLORS.green }}></span>
+              누적 세금 (라인)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-6 h-0.5 border-t-2 border-dashed" style={{ borderColor: CHART_COLORS.red }}></span>
+              공제 미적용 시 (라인)
+            </span>
+          </div>
+
+          <ResponsiveContainer width="100%" height={380}>
+            <ComposedChart data={taxData}>
               <defs>
-                <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={activeTheme.primary} stopOpacity={0.8} />
-                  <stop offset="95%" stopColor={activeTheme.primary} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={ACCENT_GOLD} stopOpacity={0.8} />
-                  <stop offset="95%" stopColor={ACCENT_GOLD} stopOpacity={0} />
+                <linearGradient id="colorCumulative" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={CHART_COLORS.green} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={CHART_COLORS.green} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(value) => `₩${value.toLocaleString()}`} />
-              <Legend />
-              <Area type="monotone" dataKey="actual" stroke={activeTheme.primary} fillOpacity={1} fill="url(#colorActual)" name="실제 납부" />
-              <Area type="monotone" dataKey="predicted" stroke={ACCENT_GOLD} fillOpacity={1} fill="url(#colorPredicted)" name="예상 납부" />
-            </AreaChart>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis
+                yAxisId="left"
+                tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`}
+                tick={{ fontSize: 11 }}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`}
+                tick={{ fontSize: 11 }}
+                stroke={CHART_COLORS.green}
+              />
+              <Tooltip
+                formatter={(value, name) => {
+                  if (value === null) return ['-', name];
+                  return [`${value.toLocaleString()}원`, name];
+                }}
+                labelFormatter={(label) => `${label}`}
+              />
+              <ReferenceLine
+                x={`${currentMonth + 1}월`}
+                stroke="#9CA3AF"
+                strokeDasharray="5 5"
+                label={{ value: '현재', position: 'top', fontSize: 10, fill: '#6B7280' }}
+                yAxisId="left"
+              />
+
+              {/* 막대: 월별 세금 (실제/예상) */}
+              <Bar yAxisId="left" dataKey="monthlyTax" fill={activeTheme.primary} name="납부 세금" radius={[4, 4, 0, 0]} />
+              <Bar yAxisId="left" dataKey="predictedTax" fill={ACCENT_GOLD} name="예상 세금" radius={[4, 4, 0, 0]} />
+
+              {/* 라인: 누적 세금 */}
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="predictedCumulative"
+                stroke={CHART_COLORS.green}
+                strokeWidth={2}
+                dot={{ r: 3, fill: CHART_COLORS.green }}
+                name="누적 세금"
+                connectNulls
+              />
+
+              {/* 라인: 공제 미적용 시 (비교용) */}
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="noDeductionTax"
+                stroke={CHART_COLORS.red}
+                strokeWidth={1.5}
+                strokeDasharray="5 5"
+                dot={false}
+                name={userType === 'individual' ? '공제 미적용' : '경비공제 미적용'}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
 
-          <div className="grid md:grid-cols-3 gap-4 mt-4">
-            <div className="rounded-lg p-4" style={{ backgroundColor: activeTheme.soft }}>
-              <div className="text-sm text-gray-600 mb-1">실제 납부액 (1~5월)</div>
-              <div className="text-2xl font-bold" style={{ color: activeTheme.primary }}>₩{totalActualTax.toLocaleString()}</div>
+          {/* 요약 카드 */}
+          <div className="grid md:grid-cols-4 gap-3 mt-4">
+            <div className="rounded-lg p-3" style={{ backgroundColor: activeTheme.soft }}>
+              <div className="text-xs text-gray-600 mb-1">납부 완료 (1~{currentMonth + 1}월)</div>
+              <div className="text-xl font-bold tabular-nums text-right" style={{ color: activeTheme.primary }}>{totalActualTax.toLocaleString()}원</div>
             </div>
-            <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(255, 215, 0, 0.16)' }}>
-              <div className="text-sm text-gray-600 mb-1">예상 납부액 (6~12월)</div>
-              <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>₩{totalPredictedTax.toLocaleString()}</div>
+            <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255, 215, 0, 0.12)' }}>
+              <div className="text-xs text-gray-600 mb-1">예상 납부 ({currentMonth + 2}~12월)</div>
+              <div className="text-xl font-bold tabular-nums text-right" style={{ color: ACCENT_GOLD }}>{totalPredictedTax.toLocaleString()}원</div>
             </div>
-            <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0, 255, 127, 0.12)' }}>
-              <div className="text-sm text-gray-600 mb-1">절세 기회</div>
-              <div className="text-2xl font-bold" style={{ color: '#00FF7F' }}>₩{Math.floor(totalPredictedTax * 0.15).toLocaleString()}</div>
+            <div className="rounded-lg p-3" style={{ backgroundColor: `${CHART_COLORS.green}12` }}>
+              <div className="text-xs text-gray-600 mb-1">연간 총 예상</div>
+              <div className="text-xl font-bold tabular-nums text-right" style={{ color: CHART_COLORS.green }}>
+                {(taxData[11]?.predictedCumulative || 0).toLocaleString()}원
+              </div>
+            </div>
+            <div className="rounded-lg p-3" style={{ backgroundColor: `${CHART_COLORS.red}12` }}>
+              <div className="text-xs text-gray-600 mb-1">공제로 절감액</div>
+              <div className="text-xl font-bold tabular-nums text-right" style={{ color: CHART_COLORS.red }}>
+                {taxData.reduce((sum, d) => sum + (d.savings || 0), 0).toLocaleString()}원
+              </div>
             </div>
           </div>
         </div>
@@ -3000,16 +3433,55 @@ const ReceiptFinancePlatform = () => {
           <div className="bg-white rounded-xl p-6 shadow-sm border">
             <h3 className="font-bold text-lg mb-4">사업 현금 흐름 분석</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={businessTaxData.slice(0, 6)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => `₩${value.toLocaleString()}`} />
-                <Legend />
-                <Bar dataKey="income" fill={ACCENT_GOLD} name="수입" />
-                <Bar dataKey="expense" fill={activeTheme.primary} name="지출" />
+              <BarChart
+                data={taxData.slice(0, currentMonth + 1).map(d => ({
+                  ...d,
+                  netProfit: (d.income || 0) - (d.expense || 0),
+                }))}
+                barCategoryGap="20%"
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis
+                  tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`}
+                  tick={{ fontSize: 12 }}
+                />
+                <Tooltip
+                  formatter={(value, name) => [
+                    `${value.toLocaleString()}원`,
+                    name === 'netProfit' ? '순이익' : name
+                  ]}
+                  contentStyle={{ borderRadius: '8px', border: `1px solid ${activeTheme.soft}` }}
+                />
+                <ReferenceLine y={0} stroke="#9CA3AF" strokeDasharray="3 3" />
+                <Bar
+                  dataKey="netProfit"
+                  name="순이익 (수입-지출)"
+                  radius={[6, 6, 6, 6]}
+                >
+                  {taxData.slice(0, currentMonth + 1).map((entry, index) => {
+                    const netProfit = (entry.income || 0) - (entry.expense || 0);
+                    return (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={netProfit >= 0 ? activeTheme.primary : ACCENT_COLOR}
+                      />
+                    );
+                  })}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
+            {/* 범례 */}
+            <div className="flex justify-center gap-6 mt-3 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: activeTheme.primary }}></div>
+                <span className="text-gray-600">흑자</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: ACCENT_COLOR }}></div>
+                <span className="text-gray-600">적자</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -3883,16 +4355,6 @@ const ReceiptFinancePlatform = () => {
               )}
             </button>
 
-            {/* 구분선 */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">또는</span>
-              </div>
-            </div>
-
           </div>
         </div>
       </div>
@@ -3925,8 +4387,10 @@ const ReceiptFinancePlatform = () => {
         </div>
       )}
 
+      {/* Header + Navigation 스티키 컨테이너 */}
+      <div className="sticky top-0 z-40">
       {/* Header with Notification Center - 스크롤 시 축소 효과 */}
-      <header className={`bg-white shadow-sm border-b sticky top-0 z-40 transition-all duration-300 ${isScrolled ? 'py-0' : ''}`}>
+      <header className={`bg-white shadow-sm border-b transition-all duration-300 ${isScrolled ? 'py-0' : ''}`}>
         <div className={`max-w-7xl mx-auto px-4 transition-all duration-300 ${isScrolled ? 'py-2' : 'py-4'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -3993,7 +4457,7 @@ const ReceiptFinancePlatform = () => {
       </header>
 
       {/* Navigation */}
-      <nav className="bg-white border-b sticky top-16 z-30">
+      <nav className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex gap-1">
             {[
@@ -4020,6 +4484,7 @@ const ReceiptFinancePlatform = () => {
           </div>
         </div>
       </nav>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
@@ -4130,7 +4595,7 @@ const ReceiptFinancePlatform = () => {
                   step="10000"
                 />
                 <div className="text-xs text-gray-500 mt-1">
-                  입력값: ₩{parseInt(tempBudgetLimit || 0).toLocaleString()}
+                  입력값: {parseInt(tempBudgetLimit || 0).toLocaleString()}원
                 </div>
               </div>
 
@@ -4219,11 +4684,11 @@ const ReceiptFinancePlatform = () => {
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-3 border-b">
                   <span className="text-gray-600">금액</span>
-                  <span className="font-bold text-xl">₩{(selectedTransaction.amount || 0).toLocaleString()}</span>
+                  <span className="font-bold text-xl">{(selectedTransaction.amount || 0).toLocaleString()}원</span>
                 </div>
                 <div className="flex justify-between items-center py-3 border-b">
                   <span className="text-gray-600">부가세 (VAT)</span>
-                  <span className="font-semibold">₩{(selectedTransaction.tax || 0).toLocaleString()}</span>
+                  <span className="font-semibold">{(selectedTransaction.tax || 0).toLocaleString()}원</span>
                 </div>
                 <div className="flex justify-between items-center py-3 border-b">
                   <span className="text-gray-600">카테고리</span>
@@ -4674,7 +5139,7 @@ const ReceiptFinancePlatform = () => {
               <div className="bg-gray-50 rounded-xl p-6 border">
                 <div className="text-center mb-4">
                   <div className="text-sm text-gray-500 mb-2">무료 플랜</div>
-                  <div className="text-4xl font-bold">₩0</div>
+                  <div className="text-4xl font-bold">0원</div>
                   <div className="text-sm text-gray-500">/ 월</div>
                 </div>
                 <ul className="space-y-2 text-sm">
@@ -4703,7 +5168,7 @@ const ReceiptFinancePlatform = () => {
                 </div>
                 <div className="text-center mb-4">
                   <div className="text-sm opacity-90 mb-2">프리미엄 플랜</div>
-                  <div className="text-5xl font-bold">₩9,900</div>
+                  <div className="text-5xl font-bold">9,900원</div>
                   <div className="text-sm opacity-90">/ 월</div>
                   <div className="mt-2 text-xs bg-white/20 rounded-full px-3 py-1 inline-block">
                     첫 달 무료
@@ -4732,7 +5197,7 @@ const ReceiptFinancePlatform = () => {
               <div className="bg-gray-50 rounded-xl p-6 border">
                 <div className="text-center mb-4">
                   <div className="text-sm text-gray-500 mb-2">연간 플랜</div>
-                  <div className="text-4xl font-bold">₩99,000</div>
+                  <div className="text-4xl font-bold">99,000원</div>
                   <div className="text-sm text-gray-500">/ 년</div>
                   <div className="mt-2 text-xs bg-green-100 text-green-700 rounded-full px-3 py-1 inline-block">
                     2개월 무료
@@ -4814,7 +5279,7 @@ const ReceiptFinancePlatform = () => {
                           ))}
                         </div>
                         <div className="flex items-center justify-between">
-                          <div className="font-bold" style={{ color: PRIMARY_BLUE }}>₩{expert.price.toLocaleString()}</div>
+                          <div className="font-bold" style={{ color: PRIMARY_BLUE }}>{expert.price.toLocaleString()}원</div>
                           <button className="text-white px-4 py-2 rounded-lg hover:opacity-90 transition" style={{ backgroundColor: PRIMARY_BLUE }}>
                             상담 신청
                           </button>
@@ -4845,7 +5310,7 @@ const ReceiptFinancePlatform = () => {
                         <div className="text-sm font-semibold mb-3" style={{ color: PRIMARY_BLUE }}>{product.benefit}</div>
                         {product.expectedSavings > 0 && (
                           <div className="text-sm text-green-600 font-bold mb-3">
-                            연 ₩{product.expectedSavings.toLocaleString()} 절감
+                            연 {product.expectedSavings.toLocaleString()}원 절감
                           </div>
                         )}
                         <button className="text-white px-6 py-2 rounded-lg hover:opacity-90 transition" style={{ backgroundColor: PRIMARY_BLUE }}>
@@ -5011,7 +5476,7 @@ const ReceiptFinancePlatform = () => {
                         <div className="text-sm text-gray-700 mb-2">{insight.description}</div>
                         {insight.potentialSaving > 0 && (
                           <div className="text-lg font-bold text-green-600">
-                            ₩{insight.potentialSaving.toLocaleString()} 절감 가능
+                            {insight.potentialSaving.toLocaleString()}원 절감 가능
                           </div>
                         )}
                       </div>
@@ -5199,21 +5664,20 @@ const ReceiptFinancePlatform = () => {
       {/* 연말정산 시뮬레이터 Modal */}
       {showTaxSimulatorModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="relative bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="tax-simulator-modal relative bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <button onClick={() => setShowTaxSimulatorModal(false)} className="absolute top-4 right-4">
               <X className="w-6 h-6" />
             </button>
             <div className="flex justify-between items-center mb-6">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-xl font-bold">연말정산 시뮬레이터</h3>
-                  <span className="text-xs px-2 py-1 rounded-full border" style={{ backgroundColor: `${PRIMARY_BLUE}15`, color: PRIMARY_BLUE, borderColor: `${PRIMARY_BLUE}30` }}>예상치 · 교육용</span>
-                  <span className="text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">홈택스 신고 전 검증 필요</span>
+                  <h3 className="text-xl font-bold nowrap">연말정산 시뮬레이터</h3>
+                  <span className="tag-nowrap text-xs px-2 py-1 rounded-full border" style={{ backgroundColor: `${PRIMARY_BLUE}15`, color: PRIMARY_BLUE, borderColor: `${PRIMARY_BLUE}30` }}>예상치 · 교육용</span>
+                  <span className="tag-nowrap text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">홈택스 신고 전 검증 필요</span>
                 </div>
                 <div className="flex flex-wrap gap-2 text-[11px] text-orange-700">
-                  <span className="px-2 py-1 bg-orange-50 border border-orange-200 rounded">의료·교육 특례 인별 한도 미반영(난임 제외)</span>
-                  <span className="px-2 py-1 bg-orange-50 border border-orange-200 rounded">업종별 부가세/간이과세 전환 구간 미적용</span>
-                  <span className="px-2 py-1 bg-orange-50 border border-orange-200 rounded">보험료·기부금 세부 규정 단순화</span>
+                  <span className="tag-nowrap tight-spacing px-2 py-1 bg-orange-50 border border-orange-200 rounded">의료·교육 특례 인별 한도 미반영(난임 제외)</span>
+                  <span className="tag-nowrap tight-spacing px-2 py-1 bg-orange-50 border border-orange-200 rounded">보험료·기부금 세부 규정 단순화</span>
                 </div>
               </div>
             </div>
@@ -5221,15 +5685,7 @@ const ReceiptFinancePlatform = () => {
             <div className="grid md:grid-cols-2 gap-6">
               {/* 입력 폼 */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="font-semibold text-gray-700">소득 정보</h4>
-                  <button
-                    onClick={() => setShowTaxAdvanced(!showTaxAdvanced)}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition"
-                  >
-                    {showTaxAdvanced ? '세부 특례 접기' : '세부 특례 입력'}
-                  </button>
-                </div>
+                <h4 className="font-semibold text-gray-700">소득 정보</h4>
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-1">연간 총급여</label>
                   <input
@@ -5274,7 +5730,7 @@ const ReceiptFinancePlatform = () => {
                     placeholder="0"
                     min="0"
                   />
-                  <p className="text-xs text-gray-500 mt-1">미입력 시 부양가족 수와 동일하게 계산합니다.</p>
+                  <p className="text-xs text-gray-500 mt-1 keep-all">미입력 시 부양가족 수와 동일하게 계산합니다.</p>
                 </div>
 
                 <h4 className="font-semibold text-gray-700 pt-2">간단 입력</h4>
@@ -5287,7 +5743,7 @@ const ReceiptFinancePlatform = () => {
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                   />
-                  <p className="text-xs text-gray-500 mt-1">세부 의료비 입력 시 이 값 대신 합산이 사용됩니다.</p>
+                  <p className="text-xs text-gray-500 mt-1 keep-all">세부 의료비 입력 시 이 값 대신 합산이 사용됩니다.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -5312,6 +5768,22 @@ const ReceiptFinancePlatform = () => {
                   </div>
                 </div>
 
+                {/* 신용카드 사용액 (2025년 신규) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">
+                    신용카드 등 사용액 (총액)
+                    <span className="text-xs text-gray-400 ml-1">세부 입력 시 무시됨</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={taxSimulatorData.creditCardTotal}
+                    onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, creditCardTotal: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="연간 카드 사용 총액"
+                  />
+                  <p className="text-xs text-gray-500 mt-1 keep-all">세부 특례에서 결제수단별 입력 시 더 정확한 계산 가능</p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1">연금저축</label>
@@ -5322,6 +5794,7 @@ const ReceiptFinancePlatform = () => {
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0"
                     />
+                    <p className="text-xs text-gray-500 mt-1">2025: 600만원 한도</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1">IRP</label>
@@ -5332,19 +5805,45 @@ const ReceiptFinancePlatform = () => {
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0"
                     />
+                    <p className="text-xs text-gray-500 mt-1">연금저축 포함 900만원</p>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">주택자금/월세 공제</label>
-                  <input
-                    type="number"
-                    value={taxSimulatorData.housingDeduction}
-                    onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, housingDeduction: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="0"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">주택자금 공제</label>
+                    <input
+                      type="number"
+                      value={taxSimulatorData.housingDeduction}
+                      onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, housingDeduction: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">
+                      월세 (연간)
+                      <span className="text-xs text-teal-600 ml-1">세액공제</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={taxSimulatorData.annualRent}
+                      onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, annualRent: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">무주택자 8천만원 이하, 한도 1천만원</p>
+                  </div>
                 </div>
+
+                {/* 세부 특례 토글 버튼 */}
+                <button
+                  onClick={() => setShowTaxAdvanced(!showTaxAdvanced)}
+                  className="w-full text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-2 keep-all"
+                >
+                  <Sparkles className="w-3 h-3 flex-shrink-0" />
+                  <span className="tight-spacing">{showTaxAdvanced ? '세부 특례 접기' : '세부 특례 입력 (의료비/교육비/기부금/신용카드 세부)'}</span>
+                </button>
 
                 {showTaxAdvanced && (
                   <div className="space-y-4 border-t border-gray-200 pt-4">
@@ -5355,7 +5854,7 @@ const ReceiptFinancePlatform = () => {
                       </div>
                       <div className="grid grid-cols-3 gap-3">
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">일반</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1 h-4 leading-4">일반</label>
                           <input
                             type="number"
                             value={taxSimulatorData.medicalGeneral}
@@ -5365,7 +5864,7 @@ const ReceiptFinancePlatform = () => {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">난임(20%)</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1 h-4 leading-4">난임(20%)</label>
                           <input
                             type="number"
                             value={taxSimulatorData.medicalInfertility}
@@ -5375,7 +5874,7 @@ const ReceiptFinancePlatform = () => {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">65세↑/장애/3자녀</label>
+                          <label className="block text-xs font-medium text-gray-600 mb-1 h-4 leading-4 nowrap tight-spacing" title="65세 이상/장애인/3자녀 이상">65세↑장애</label>
                           <input
                             type="number"
                             value={taxSimulatorData.medicalSenior}
@@ -5385,7 +5884,7 @@ const ReceiptFinancePlatform = () => {
                           />
                         </div>
                       </div>
-                      <p className="text-[11px] text-gray-500 mt-1">인별/항목 한도는 단순 합산으로 반영됩니다.</p>
+                      <p className="text-[11px] text-gray-500 mt-1 keep-all">인별/항목 한도는 단순 합산으로 반영됩니다.</p>
                     </div>
 
                     <div>
@@ -5425,7 +5924,7 @@ const ReceiptFinancePlatform = () => {
                           />
                         </div>
                       </div>
-                      <p className="text-[11px] text-gray-500 mt-1">인별 한도/특례(장애, 다자녀)는 간략 합산으로만 반영됩니다.</p>
+                      <p className="text-[11px] text-gray-500 mt-1 keep-all">인별 한도/특례(장애, 다자녀)는 간략 합산으로만 반영됩니다.</p>
                     </div>
 
                     <div>
@@ -5475,90 +5974,214 @@ const ReceiptFinancePlatform = () => {
                           />
                         </div>
                       </div>
-                      <p className="text-[11px] text-gray-500 mt-1">소득 대비 한도/종교 구분은 단순 합산으로 계산됩니다.</p>
+                      <p className="text-[11px] text-gray-500 mt-1 keep-all">소득 대비 한도/종교 구분은 단순 합산으로 계산됩니다.</p>
                     </div>
 
                     <div>
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-2">
                         <Shield className="w-4 h-4 text-emerald-500" />
-                        <h5 className="font-semibold text-gray-700">보험료 입력</h5>
+                        <h5 className="font-semibold text-gray-700">4대보험 (자동 계산)</h5>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">2025년 요율</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">국민연금</label>
-                          <input
-                            type="number"
-                            value={taxSimulatorData.insuranceNational}
-                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, insuranceNational: parseInt(e.target.value) || 0 })}
-                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
-                            placeholder="0"
-                          />
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div className="bg-emerald-50 rounded-lg p-2 text-center">
+                          <div className="text-xs text-gray-500 h-4 leading-4">국민연금</div>
+                          <div className="font-semibold text-emerald-700">{(taxSimulatorData.insuranceNational || 0).toLocaleString()}원</div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">건강보험</label>
-                          <input
-                            type="number"
-                            value={taxSimulatorData.insuranceHealth}
-                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, insuranceHealth: parseInt(e.target.value) || 0 })}
-                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
-                            placeholder="0"
-                          />
+                        <div className="bg-emerald-50 rounded-lg p-2 text-center">
+                          <div className="text-xs text-gray-500 h-4 leading-4 nowrap" title="건강보험+장기요양보험">건강+요양</div>
+                          <div className="font-semibold text-emerald-700">{(taxSimulatorData.insuranceHealth || 0).toLocaleString()}원</div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">고용보험</label>
-                          <input
-                            type="number"
-                            value={taxSimulatorData.insuranceEmployment}
-                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, insuranceEmployment: parseInt(e.target.value) || 0 })}
-                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
-                            placeholder="0"
-                          />
+                        <div className="bg-emerald-50 rounded-lg p-2 text-center">
+                          <div className="text-xs text-gray-500 h-4 leading-4">고용보험</div>
+                          <div className="font-semibold text-emerald-700">{(taxSimulatorData.insuranceEmployment || 0).toLocaleString()}원</div>
                         </div>
                       </div>
-                      <p className="text-[11px] text-gray-500 mt-1">보장성 보험료 100만원 한도 등은 별도 특례로 미반영.</p>
+                      <p className="text-[11px] text-gray-500 mt-1 keep-all">총급여 기준 자동 계산 (국민연금 4.5%, 건강 3.545%, 장기요양 12.95%, 고용 0.9%)</p>
+                    </div>
+
+                    {/* 신용카드 결제수단별 세부 입력 (2025년 신규) */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <CreditCard className="w-4 h-4 text-violet-500" />
+                        <h5 className="font-semibold text-gray-700">신용카드 등 결제수단별</h5>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded">2025 3중한도</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">신용카드 (15%)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.creditCardAmount}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, creditCardAmount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">체크카드 (30%)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.debitCardAmount}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, debitCardAmount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">현금영수증 (30%)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.cashReceiptAmount}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, cashReceiptAmount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">전통시장 (40%)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.traditionalMarketAmount}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, traditionalMarketAmount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">대중교통 (40%)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.publicTransportAmount}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, publicTransportAmount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">문화비 (30%)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.cultureAmount}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, cultureAmount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">체육시설 (30%)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.sportsAmount}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, sportsAmount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">전년도 총액</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.previousYearCardTotal}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, previousYearCardTotal: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-gray-400 text-sm"
+                            placeholder="소비증가분용"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        기본한도(7천만↓300만) + 추가한도(시장·교통·문화·체육 300만) + 소비증가분(100만)
+                      </p>
+                      <p className="text-[10px] text-orange-600 mt-0.5">
+                        ※ 7천만원 초과 시 문화비·체육시설은 추가한도 제외
+                      </p>
+                    </div>
+
+                    {/* 월세 세액공제 세부 옵션 */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Home className="w-4 h-4 text-teal-500" />
+                        <h5 className="font-semibold text-gray-700">월세 세액공제 옵션</h5>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={taxSimulatorData.isHomeOwner}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, isHomeOwner: e.target.checked })}
+                            className="w-4 h-4 text-teal-500 rounded"
+                          />
+                          <span className="text-xs">주택 소유 (공제 불가)</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <label className="text-xs text-gray-600">전용면적:</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.housingSize}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, housingSize: parseInt(e.target.value) || 85 })}
+                            className="w-16 px-2 py-1 border rounded text-xs"
+                            placeholder="85"
+                          />
+                          <span className="text-xs text-gray-500">㎡</span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1 keep-all">
+                        무주택 + 총급여 8천만원 이하 + 85㎡ 이하(또는 4억 이하)
+                      </p>
                     </div>
                   </div>
                 )}
-
-                <button
-                  onClick={calculateTaxSimulation}
-                  className="w-full text-white py-3 rounded-lg font-semibold hover:opacity-90 transition flex items-center justify-center gap-2"
-                  style={{ backgroundColor: PRIMARY_BLUE }}
-                >
-                  <Calculator className="w-5 h-5" />
-                  세금 계산하기
-                </button>
               </div>
 
               {/* 결과 */}
               <div className="bg-gray-50 rounded-xl p-4">
-                <h4 className="font-semibold text-gray-700 mb-4">계산 결과</h4>
+                {/* 계산/불러오기 버튼 - 결과 없을 때만 표시 */}
+                {!taxSimulatorResult && (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={loadFromAppData}
+                      className="w-full text-white py-2.5 rounded-lg font-semibold hover:opacity-90 transition flex items-center justify-center gap-2 text-sm"
+                      style={{ backgroundColor: CHART_COLORS.green }}
+                    >
+                      <Download className="w-4 h-4" />
+                      <span className="keep-all">내 데이터 불러오기</span>
+                    </button>
+                    <button
+                      onClick={calculateTaxSimulation}
+                      className="w-full text-white py-2.5 rounded-lg font-semibold hover:opacity-90 transition flex items-center justify-center gap-2 text-sm"
+                      style={{ backgroundColor: PRIMARY_BLUE }}
+                    >
+                      <Calculator className="w-4 h-4" />
+                      <span className="keep-all">직접 계산하기</span>
+                    </button>
+                  </div>
+                )}
                 {taxSimulatorResult ? (
                   <div className="space-y-3">
                     <div className="bg-white rounded-lg p-3 border">
                       <div className="text-sm text-gray-500">연간 총급여</div>
-                      <div className="text-lg font-bold">{taxSimulatorResult.annualIncome.toLocaleString()}원</div>
+                      <div className="text-lg font-bold text-right tabular-nums">{taxSimulatorResult.annualIncome.toLocaleString()}원</div>
                     </div>
                     <div className="bg-white rounded-lg p-3 border">
                       <div className="text-sm text-gray-500">근로소득공제</div>
-                      <div className="text-lg font-bold text-green-600">-{taxSimulatorResult.earnedIncomeDeduction.toLocaleString()}원</div>
+                      <div className="text-lg font-bold text-right tabular-nums text-green-600">-{taxSimulatorResult.earnedIncomeDeduction.toLocaleString()}원</div>
                     </div>
                     <div className="bg-white rounded-lg p-3 border">
                       <div className="text-sm text-gray-500">과세표준</div>
-                      <div className="text-lg font-bold">{taxSimulatorResult.taxableIncome.toLocaleString()}원</div>
+                      <div className="text-lg font-bold text-right tabular-nums">{taxSimulatorResult.taxableIncome.toLocaleString()}원</div>
                     </div>
                     <div className="bg-white rounded-lg p-3 border">
                       <div className="text-sm text-gray-500">산출세액</div>
-                      <div className="text-lg font-bold">{taxSimulatorResult.calculatedTax.toLocaleString()}원</div>
+                      <div className="text-lg font-bold text-right tabular-nums">{taxSimulatorResult.calculatedTax.toLocaleString()}원</div>
                     </div>
                     <div className="bg-white rounded-lg p-3 border">
                       <div className="text-sm text-gray-500">세액공제</div>
-                      <div className="text-lg font-bold text-green-600">-{(taxSimulatorResult.taxCredits + taxSimulatorResult.earnedIncomeTaxCredit).toLocaleString()}원</div>
+                      <div className="text-lg font-bold text-right tabular-nums text-green-600">-{(taxSimulatorResult.taxCredits + taxSimulatorResult.earnedIncomeTaxCredit).toLocaleString()}원</div>
                     </div>
                     <div className="bg-red-500 rounded-lg p-4 text-white shadow-flat">
                       <div className="text-sm opacity-90">예상 총 세금</div>
-                      <div className="text-2xl font-bold">{taxSimulatorResult.totalTax.toLocaleString()}원</div>
-                      <div className="text-sm opacity-90 mt-1">
+                      <div className="text-2xl font-bold text-right tabular-nums">{taxSimulatorResult.totalTax.toLocaleString()}원</div>
+                      <div className="text-sm opacity-90 mt-1 text-right tabular-nums">
                         실효세율: {taxSimulatorResult.effectiveRate}% | 월 {taxSimulatorResult.monthlyTax.toLocaleString()}원
                       </div>
                     </div>
@@ -5566,25 +6189,99 @@ const ReceiptFinancePlatform = () => {
                     {(() => {
                       const meta = taxSimulatorResult.meta || {};
                       const insurancePremiums = meta.insurancePremiums || {};
-                          const insuranceTotal = (insurancePremiums.national || 0) + (insurancePremiums.health || 0) + (insurancePremiums.employment || 0);
-                          const donationSum = Object.values(meta.donations || {}).reduce((sum, v) => sum + (v || 0), 0);
-                          const educationSum = Object.values(meta.educationExpenses || {}).reduce((sum, v) => sum + (v || 0), 0);
-                          const childCount = meta.childDependents || 0;
-                          return (
-                            <div className="bg-white rounded-lg p-3 border">
-                              <div className="text-xs text-gray-500 mb-2">입력 요약</div>
+                      const insuranceTotal = (insurancePremiums.national || 0) + (insurancePremiums.health || 0) + (insurancePremiums.employment || 0);
+                      const donationSum = Object.values(meta.donations || {}).reduce((sum, v) => sum + (v || 0), 0);
+                      const educationSum = Object.values(meta.educationExpenses || {}).reduce((sum, v) => sum + (v || 0), 0);
+                      const childCount = meta.childDependents || 0;
+                      const creditCardResult = meta.creditCardResult;
+                      const rentResult = meta.rentResult;
+                      return (
+                        <div className="space-y-3">
+                          {/* 신용카드 공제 결과 */}
+                          {creditCardResult && creditCardResult.totalDeduction > 0 && (
+                            <div className="bg-violet-50 rounded-lg p-3 border border-violet-200">
+                              <div className="text-xs font-semibold text-violet-700 mb-2">신용카드 소득공제</div>
                               <div className="text-xs text-gray-700 space-y-1">
-                                <div className="flex justify-between"><span>의료비</span><span>{(meta.medicalTotal || 0).toLocaleString()}원{meta.hasInfertility ? ' (난임 20% 적용)' : ''}</span></div>
-                                <div className="flex justify-between"><span>교육비</span><span>{educationSum.toLocaleString()}원</span></div>
-                                <div className="flex justify-between"><span>기부금</span><span>{donationSum.toLocaleString()}원</span></div>
-                                <div className="flex justify-between"><span>보험료</span><span>{insuranceTotal.toLocaleString()}원</span></div>
-                                <div className="flex justify-between"><span>주택 공제</span><span>{(taxSimulatorData.housingDeduction || 0).toLocaleString()}원</span></div>
-                                <div className="flex justify-between"><span>자녀 세액공제</span><span>{childCount > 0 ? `${childCount}명 반영` : '입력 없음'}</span></div>
+                                <div className="flex justify-between">
+                                  <span>총 사용액</span>
+                                  <span>{creditCardResult.totalUsage.toLocaleString()}원</span>
+                                </div>
+                                <div className="flex justify-between text-gray-500">
+                                  <span>최저사용금액 (25%)</span>
+                                  <span>{creditCardResult.minimumUsage.toLocaleString()}원</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>기본한도 공제</span>
+                                  <span className="text-green-600">{creditCardResult.basicDeduction.toLocaleString()}원</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>추가한도 공제</span>
+                                  <span className="text-green-600">{creditCardResult.additionalDeduction.toLocaleString()}원</span>
+                                </div>
+                                {creditCardResult.increaseDeduction > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>소비증가분</span>
+                                    <span className="text-green-600">{creditCardResult.increaseDeduction.toLocaleString()}원</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between font-semibold pt-1 border-t border-violet-200">
+                                  <span>총 공제액</span>
+                                  <span className="text-violet-700">{creditCardResult.totalDeduction.toLocaleString()}원</span>
+                                </div>
                               </div>
-                              <div className="text-[11px] text-orange-600 mt-2">
-                                특례·인별 한도는 단순 계산(난임 제외)이며, 실제 신고 전 최신 고시와 홈택스 결과를 확인하세요.
+                              {!creditCardResult.isUnder70m && (
+                                <p className="text-[10px] text-orange-600 mt-1 keep-all">※ 7천만원 초과로 문화비/체육시설 추가한도 제외</p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 월세 세액공제 결과 */}
+                          {rentResult && rentResult.credit > 0 && (
+                            <div className="bg-teal-50 rounded-lg p-3 border border-teal-200">
+                              <div className="text-xs font-semibold text-teal-700 mb-2">월세 세액공제</div>
+                              <div className="text-xs text-gray-700 space-y-1">
+                                <div className="flex justify-between">
+                                  <span>연간 월세</span>
+                                  <span>{rentResult.annualRent.toLocaleString()}원</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>공제대상 금액</span>
+                                  <span>{rentResult.eligibleRent.toLocaleString()}원</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>공제율 ({rentResult.incomeCategory})</span>
+                                  <span>{rentResult.ratePercent}</span>
+                                </div>
+                                <div className="flex justify-between font-semibold pt-1 border-t border-teal-200">
+                                  <span>세액공제</span>
+                                  <span className="text-teal-700">{rentResult.credit.toLocaleString()}원</span>
+                                </div>
                               </div>
                             </div>
+                          )}
+                          {rentResult && !rentResult.conditions.isEligible && (
+                            <div className="bg-orange-50 rounded-lg p-2 border border-orange-200">
+                              <div className="text-xs text-orange-700">
+                                월세 세액공제 불가: {rentResult.conditions.reasons.join(', ')}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="bg-white rounded-lg p-3 border">
+                            <div className="text-xs text-gray-500 mb-2">입력 요약</div>
+                            <div className="text-xs text-gray-700 space-y-1">
+                              <div className="flex justify-between"><span>의료비</span><span>{(meta.medicalTotal || 0).toLocaleString()}원{meta.hasInfertility ? ' (난임 20% 적용)' : ''}</span></div>
+                              <div className="flex justify-between"><span>교육비</span><span>{educationSum.toLocaleString()}원</span></div>
+                              <div className="flex justify-between"><span>기부금</span><span>{donationSum.toLocaleString()}원</span></div>
+                              <div className="flex justify-between"><span>보험료</span><span>{insuranceTotal.toLocaleString()}원</span></div>
+                              <div className="flex justify-between"><span>주택 공제</span><span>{(taxSimulatorData.housingDeduction || 0).toLocaleString()}원</span></div>
+                              <div className="flex justify-between"><span>자녀 세액공제</span><span>{childCount > 0 ? `${childCount}명 반영` : '입력 없음'}</span></div>
+                            </div>
+                            <div className="text-[11px] text-orange-600 mt-2 keep-all">
+                              특례·인별 한도는 단순 계산(난임 제외)이며, 실제 신고 전 최신 고시와 홈택스 결과를 확인하세요.
+                            </div>
+                          </div>
+                        </div>
                       );
                     })()}
 
@@ -5595,11 +6292,57 @@ const ReceiptFinancePlatform = () => {
                       <Download className="w-4 h-4" />
                       PDF로 저장
                     </button>
+                    <button
+                      onClick={() => {
+                        setTaxSimulatorData({
+                          annualIncome: 0,
+                          dependents: 0,
+                          childDependents: 0,
+                          hasSpouse: false,
+                          medicalExpenses: 0,
+                          medicalGeneral: 0,
+                          medicalInfertility: 0,
+                          medicalSenior: 0,
+                          educationTotal: 0,
+                          educationSelf: 0,
+                          educationChild: 0,
+                          educationUniversity: 0,
+                          pensionSavings: 0,
+                          irpAmount: 0,
+                          donationsSimple: 0,
+                          donationsLegal: 0,
+                          donationsDesignated: 0,
+                          donationsReligious: 0,
+                          donationsPolitical: 0,
+                          insuranceNational: 0,
+                          insuranceHealth: 0,
+                          insuranceEmployment: 0,
+                          housingDeduction: 0,
+                          creditCardTotal: 0,
+                          creditCardAmount: 0,
+                          debitCardAmount: 0,
+                          cashReceiptAmount: 0,
+                          traditionalMarketAmount: 0,
+                          publicTransportAmount: 0,
+                          cultureAmount: 0,
+                          sportsAmount: 0,
+                          previousYearCardTotal: 0,
+                          annualRent: 0,
+                          isHomeOwner: false,
+                          housingSize: 85,
+                        });
+                        setTaxSimulatorResult(null);
+                      }}
+                      className="w-full bg-gray-100 text-gray-600 py-2 rounded-lg font-semibold hover:bg-gray-200 transition flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      초기화
+                    </button>
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-gray-400">
-                    <Calculator className="w-16 h-16 mx-auto mb-3 opacity-50" />
-                    <p>소득 정보를 입력하고<br />계산하기 버튼을 눌러주세요</p>
+                  <div className="text-center py-8 text-gray-400">
+                    <Calculator className="w-12 h-12 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm keep-all">위 버튼을 눌러 계산을 시작하세요</p>
                   </div>
                 )}
               </div>

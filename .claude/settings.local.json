@@ -34,7 +34,11 @@
       "Bash(dir /s /b C:gitfina_rsrc*.tsx C:gitfina_rsrc*.ts 2)",
       "Bash(git add:*)",
       "mcp__supabase__list_migrations",
-      "Bash(timeout 10 npm run dev:*)"
+      "Bash(timeout 10 npm run dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(pkill:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []
