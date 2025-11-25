@@ -79,6 +79,9 @@ const VAT_RATE = 0.10;
 
 // 간이과세 기준
 const SIMPLIFIED_TAX_THRESHOLD = 80000000; // 8천만원
+const SIMPLIFIED_VAT_RELIEF_RATE = 0.5; // 간이과세 납부세액 50% 경감
+const SIMPLIFIED_VAT_RELIEF_CAP = 1000000; // 경감 한도 100만원
+const DONATION_TIER_THRESHOLD = 10000000; // 기부금 세액공제 1,000만원 구간
 
 /**
  * 근로소득공제 계산
@@ -176,8 +179,8 @@ export const calculatePensionDeduction = (pensionSavings, irpAmount, totalIncome
   const pensionDeductible = Math.min(pensionSavings, pensionLimit);
   const totalDeductible = Math.min(pensionDeductible + irpAmount, totalLimit);
 
-  // 총급여 5,500만원 이하: 16.5%, 초과: 13.2%
-  const rate = totalIncome <= 55000000 ? 0.165 : 0.132;
+  // 총급여 5,500만원 이하: 16.5%, 5,500만원~1.2억원: 15%, 초과: 13.2%
+  const rate = totalIncome <= 55000000 ? 0.165 : totalIncome <= 120000000 ? 0.15 : 0.132;
 
   return Math.floor(totalDeductible * rate);
 };
@@ -186,30 +189,40 @@ export const calculatePensionDeduction = (pensionSavings, irpAmount, totalIncome
  * 기부금 공제 계산
  */
 export const calculateDonationDeduction = (donations, totalIncome) => {
+  const cappedIncome = Math.max(0, totalIncome || 0);
   let totalDeduction = 0;
 
-  // 법정기부금 (전액, 소득의 100%까지)
+  const applyTieredCredit = (amount, limit) => {
+    const capped = Math.min(amount, limit);
+    const base = Math.min(capped, DONATION_TIER_THRESHOLD);
+    const excess = Math.max(0, capped - DONATION_TIER_THRESHOLD);
+    return (base * 0.15) + (excess * 0.30);
+  };
+
+  // 법정기부금 (소득 100%까지, 1천만원 초과분 30%)
   if (donations.legal) {
-    totalDeduction += Math.min(donations.legal, totalIncome) * 0.15;
+    totalDeduction += applyTieredCredit(donations.legal, cappedIncome);
   }
 
-  // 정치자금 (10만원까지 100%, 초과분 15%)
-  if (donations.political) {
-    const under100k = Math.min(donations.political, 100000);
-    const over100k = Math.max(0, donations.political - 100000);
-    totalDeduction += under100k + (over100k * 0.15);
-  }
-
-  // 지정기부금 (소득의 30%까지)
+  // 지정기부금 (소득의 30%까지, 1천만원 초과분 30%)
   if (donations.designated) {
-    const limit = totalIncome * 0.30;
-    totalDeduction += Math.min(donations.designated, limit) * 0.15;
+    const limit = cappedIncome * 0.30;
+    totalDeduction += applyTieredCredit(donations.designated, limit);
   }
 
-  // 종교단체 (소득의 10%까지)
+  // 종교단체 (소득의 10%까지, 1천만원 초과분 30%)
   if (donations.religious) {
-    const limit = totalIncome * 0.10;
-    totalDeduction += Math.min(donations.religious, limit) * 0.15;
+    const limit = cappedIncome * 0.10;
+    totalDeduction += applyTieredCredit(donations.religious, limit);
+  }
+
+  // 정치자금: 10만원까지 100%, 10만원 초과~3천만원 15%, 3천만원 초과 25%
+  if (donations.political) {
+    const amount = donations.political;
+    const tier1 = Math.min(amount, 100000);
+    const tier2 = Math.min(Math.max(0, amount - 100000), 29900000);
+    const tier3 = Math.max(0, amount - 30000000);
+    totalDeduction += tier1 + (tier2 * 0.15) + (tier3 * 0.25);
   }
 
   return Math.floor(totalDeduction);
@@ -261,11 +274,12 @@ export const calculateIndividualTax = ({
     calculateDonationDeduction(donations, earnedIncome) +
     calculatePensionDeduction(pensionSavings, irpAmount, annualIncome);
 
-  // 근로소득세액공제 (130만원 한도)
-  const earnedIncomeTaxCredit = Math.min(
-    calculatedTax * 0.55, // 산출세액의 55%
-    1300000
-  );
+  // 근로소득세액공제: 산출세액 55%(한도 66만) + 추가공제 30%(최대 74만)
+  let earnedIncomeTaxCredit = Math.min(calculatedTax * 0.55, 660000);
+  if (calculatedTax > 1200000) {
+    const additional = (calculatedTax - 1200000) * 0.30;
+    earnedIncomeTaxCredit = Math.min(660000 + additional, 740000);
+  }
 
   // 8. 결정세액
   const finalTax = Math.max(0, calculatedTax - taxCredits - earnedIncomeTaxCredit);
@@ -307,13 +321,17 @@ export const calculateVAT = ({
     // 간이과세자: 매출 × 업종별 부가가치율 × 10%
     const vat = Math.floor(sales * industryRate * VAT_RATE);
     const deductible = Math.floor(purchases * VAT_RATE * 0.5); // 50%만 공제
+    const relief = Math.min(Math.floor(vat * SIMPLIFIED_VAT_RELIEF_RATE), SIMPLIFIED_VAT_RELIEF_CAP);
+    const vatPayable = Math.max(0, vat - deductible - relief);
     return {
       type: 'simplified',
       sales,
       purchases,
       outputVat: vat,
       inputVat: deductible,
-      vatPayable: Math.max(0, vat - deductible),
+      relief,
+      vatPayable,
+      overThreshold: sales > SIMPLIFIED_TAX_THRESHOLD,
     };
   }
 
