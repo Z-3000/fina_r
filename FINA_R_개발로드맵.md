@@ -270,11 +270,13 @@ npm run dev:full
 ## 환경 변수 (.env)
 
 ```env
-VITE_SUPABASE_URL=https://rtqsflsgwowfkdwcphbf.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
-VITE_KAKAO_JS_KEY=e265a89549a2ea23e64e4d7b9fe85a15
-VITE_KAKAO_REST_KEY=54300825c5e6c2002694db93e21ba26c
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_KAKAO_JS_KEY=your_kakao_js_key
+VITE_KAKAO_REST_KEY=your_kakao_rest_key
 ```
+
+> ⚠️ 실제 키는 `.env` 파일에만 저장하고 절대 커밋하지 마세요.
 
 ---
 

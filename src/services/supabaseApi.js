@@ -526,38 +526,21 @@ export const attendanceAPI = {
 // 리워드 API
 // ============================================
 export const rewardsAPI = {
-  // 리워드 교환
+  // 리워드 교환 (DB 함수로 원자성 보장)
   exchange: async (userId, rewardName, points) => {
-    // 포인트 차감
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('points')
-      .eq('id', userId)
-      .single();
+    // RPC로 포인트 확인 + 차감 + 기록 추가를 한 번에 처리
+    const { data, error } = await supabase.rpc('exchange_reward', {
+      p_user_id: userId,
+      p_reward_name: rewardName,
+      p_points: points
+    });
 
-    if (profile.points < points) {
-      throw new Error('포인트가 부족합니다.');
+    if (error) {
+      if (error.message.includes('insufficient')) {
+        throw new Error('포인트가 부족합니다.');
+      }
+      throw error;
     }
-
-    // 교환 기록
-    const { data, error } = await supabase
-      .from('reward_history')
-      .insert({
-        user_id: userId,
-        reward_name: rewardName,
-        points_used: points,
-        status: 'pending'
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // 포인트 차감
-    await supabase
-      .from('profiles')
-      .update({ points: profile.points - points })
-      .eq('id', userId);
 
     return data;
   },
@@ -628,7 +611,9 @@ export const taxAPI = {
 
     if (deductions.length > 0) {
       const deductionUsage = deductions.reduce((sum, item) => {
-        return sum + (item.current_amount / item.max_deduction);
+        const current = item.current_amount || 0;
+        const max = item.max_deduction || 1; // 0으로 나누기 방지
+        return sum + (max > 0 ? current / max : 0);
       }, 0) / deductions.length;
       score -= (1 - deductionUsage) * 20;
 
@@ -916,12 +901,8 @@ export const communityAPI = {
 
   // 좋아요
   likePost: async (postId) => {
-    const { data, error } = await supabase
-      .from('community_posts')
-      .update({ likes_count: supabase.rpc('increment_likes', { post_id: postId }) })
-      .eq('id', postId)
-      .select()
-      .single();
+    // RPC로 likes_count 증가 처리 (DB 함수에서 원자적 증감)
+    const { data, error } = await supabase.rpc('increment_likes', { post_id: postId });
     if (error) throw error;
     return data;
   },
