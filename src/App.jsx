@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Camera, Upload, Wallet, TrendingUp, TrendingDown, PieChart, FileText, Users, CreditCard, Calculator, Award, ChevronRight, Plus, X, Check, AlertCircle, Sparkles, Calendar, DollarSign, Building, Bell, Target, Trophy, MessageCircle, ThumbsUp, Send, Zap, Crown, Star, Shield, Gift, ArrowUp, ArrowDown, Activity, Clock, CheckCircle, Briefcase, User, Flame, Repeat, Lock, Unlock, PartyPopper, Ticket, Coffee, ShoppingBag, Link, RefreshCw, CheckCircle2, Timer, BarChart3, Eye, EyeOff, Download, FileCheck, Folder, Search, Filter, TrendingUpIcon, AlertTriangle, Lightbulb, Receipt, Heart, GraduationCap, Home, Car, Baby, Pill, BookOpen, Laptop, Waves, LogIn, UserPlus, Key } from 'lucide-react';
 import { PieChart as RechartsPie, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, RadialBarChart, RadialBar } from 'recharts';
 import { supabase, onAuthStateChange } from './lib/supabase';
+import './App.css';
 import {
   authAPI,
   receiptsAPI,
@@ -30,7 +31,11 @@ import {
   bankDummyTransactionsAPI,
 } from './services/supabaseApi';
 import { processReceiptImage, compressImage } from './services/ocrService';
-import { calculateIndividualTax, calculateBusinessTax } from './services/taxCalculator';
+import {
+  calculateIndividualTax,
+  calculateBusinessTax,
+  calculateDetailedTaxHealthScores,
+} from './services/taxCalculator';
 import {
   generateMonthlyExpenseReport,
   generateYearEndTaxReport,
@@ -41,10 +46,60 @@ import {
   exportAllDataToExcel,
 } from './services/exportService';
 
+// ============================================
+// FINA_R Custom Color System
+// Base Colors: #0FFFFF, #003262, #FFC591, #00FFBF
+// ============================================
+
+// 탭별 테마 컬러 매핑
+// Cyan (#0FFFFF) - 하이라이트, 정보
+// Navy (#003262) - 메인, 전문성, 신뢰
+// Peach (#FFC591) - 따뜻한 악센트, 주의, 보상
+// Mint (#00FFBF) - 성공, 성장, 긍정
+
+const TAB_THEMES = {
+  dashboard: { primary: '#003262', soft: '#E6F4FF', text: '#FFFFFF', border: '#003262' },  // Navy - 메인 대시보드
+  receipts: { primary: '#003262', soft: '#E6F4FF', text: '#FFFFFF', border: '#004080' },   // Navy - 영수증/문서
+  budget: { primary: '#FFC591', soft: '#FFF5EC', text: '#003262', border: '#FFC591' },     // Peach - 지출/예산
+  prediction: { primary: '#00FFBF', soft: '#E6FFF7', text: '#003262', border: '#00FFBF' }, // Mint - 예측/성장
+  benefits: { primary: '#0FFFFF', soft: '#E6FFFF', text: '#003262', border: '#0FFFFF' },   // Cyan - 혜택/정보
+  challenges: { primary: '#003262', soft: '#E6F4FF', text: '#FFFFFF', border: '#003262' }, // Navy - 챌린지
+};
+
+// ===== Main Colors =====
+const PRIMARY_COLOR = '#003262';    // Navy - 메인, 전문성, 신뢰
+const SECONDARY_COLOR = '#00FFBF';  // Mint - 성공, 성장, 수입
+const TERTIARY_COLOR = '#0FFFFF';   // Cyan - 하이라이트, 정보
+const ACCENT_COLOR = '#FFC591';     // Peach - 따뜻한 악센트, 보상
+
+// ===== Derived Colors (명도/채도 조정) =====
+const PRIMARY_LIGHT = '#004080';    // Navy 밝게
+const PRIMARY_DARK = '#001a40';     // Navy 어둡게
+const SECONDARY_LIGHT = '#66FFD9';  // Mint 밝게
+const SECONDARY_DARK = '#00CC99';   // Mint 어둡게
+const TERTIARY_LIGHT = '#66FFFF';   // Cyan 밝게
+const TERTIARY_DARK = '#00CCCC';    // Cyan 어둡게
+const ACCENT_LIGHT = '#FFD9B3';     // Peach 밝게
+const ACCENT_DARK = '#E6A060';      // Peach 어둡게
+
+// ===== Semantic Colors =====
+const SUCCESS_COLOR = '#00FFBF';    // Mint
+const WARNING_COLOR = '#FFC591';    // Peach
+const ERROR_COLOR = '#FF6B6B';      // Red (Peach 계열 적색 변형)
+const INFO_COLOR = '#0FFFFF';       // Cyan
+
+// ===== Legacy aliases (하위 호환성) =====
+const ACCENT_GOLD = ACCENT_COLOR;   // → Peach
+const BRAND_COLOR = PRIMARY_COLOR;  // → Navy
+const PRIMARY_BLUE = PRIMARY_COLOR; // → Navy
+const SUCCESS_GREEN = SECONDARY_COLOR; // → Mint
+const NEON_ICE = TERTIARY_COLOR;    // → Cyan
+
 const ReceiptFinancePlatform = () => {
   // Loading state for API calls
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
+  const [isScrolled, setIsScrolled] = useState(false); // 스크롤 상태 관리
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
@@ -56,6 +111,7 @@ const ReceiptFinancePlatform = () => {
   const [showDocSpaceModal, setShowDocSpaceModal] = useState(false);
   const [showPDFReportModal, setShowPDFReportModal] = useState(false);
   const [showTaxSimulatorModal, setShowTaxSimulatorModal] = useState(false);
+  const [showTaxAdvanced, setShowTaxAdvanced] = useState(false);
   const [showAIInsightModal, setShowAIInsightModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false); // 설정 모달
   
@@ -65,6 +121,7 @@ const ReceiptFinancePlatform = () => {
     annualIncome: 50000000,      // 연봉
     dependents: 0,               // 부양가족 수
     hasSpouse: false,            // 배우자 유무
+    childDependents: 0,          // 자녀 수(선택)
     // 소상공인용
     expectedRevenue: 100000000,  // 예상 연매출
     expectedExpenses: 60000000,  // 예상 경비
@@ -104,6 +161,23 @@ const ReceiptFinancePlatform = () => {
   const [authPassword, setAuthPassword] = useState('');
   const [authName, setAuthName] = useState('');
   const [authError, setAuthError] = useState('');
+  const activeTheme = TAB_THEMES[currentTab] || TAB_THEMES.dashboard;
+  const themeStyle = {
+    '--theme-primary': activeTheme.primary,
+    '--theme-soft': activeTheme.soft,
+    '--theme-text': activeTheme.text,
+    '--theme-border': activeTheme.border,
+    '--theme-accent': ACCENT_GOLD,
+  };
+
+  // 스크롤 이벤트 리스너 - 상단바 축소 효과
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Supabase 인증 상태 감시
   useEffect(() => {
@@ -159,6 +233,7 @@ const ReceiptFinancePlatform = () => {
             annualIncome: profile.tax_basic_info.annualIncome || 50000000,
             dependents: profile.tax_basic_info.dependents || 0,
             hasSpouse: profile.tax_basic_info.hasSpouse || false,
+            childDependents: profile.tax_basic_info.childDependents || profile.tax_basic_info.dependents || 0,
             expectedRevenue: profile.tax_basic_info.expectedRevenue || 100000000,
             expectedExpenses: profile.tax_basic_info.expectedExpenses || 60000000,
             isSimplifiedTax: profile.tax_basic_info.isSimplifiedTax || false,
@@ -560,6 +635,7 @@ const ReceiptFinancePlatform = () => {
               annualIncome: profile.tax_basic_info.annualIncome || 50000000,
               dependents: profile.tax_basic_info.dependents || 0,
               hasSpouse: profile.tax_basic_info.hasSpouse || false,
+              childDependents: profile.tax_basic_info.childDependents || profile.tax_basic_info.dependents || 0,
               expectedRevenue: profile.tax_basic_info.expectedRevenue || 100000000,
               expectedExpenses: profile.tax_basic_info.expectedExpenses || 60000000,
               isSimplifiedTax: profile.tax_basic_info.isSimplifiedTax || false,
@@ -689,6 +765,7 @@ const ReceiptFinancePlatform = () => {
           annualIncome: taxBasicInfo.annualIncome,
           dependents: taxBasicInfo.dependents,
           hasSpouse: taxBasicInfo.hasSpouse,
+          childDependents: taxBasicInfo.childDependents || taxBasicInfo.dependents,
         });
         taxEstimate = taxResult.totalTax || 0;
       } else {
@@ -1130,8 +1207,12 @@ const ReceiptFinancePlatform = () => {
           dependents: taxSimulatorData.dependents,
           hasSpouse: taxSimulatorData.hasSpouse,
           medicalExpenses: taxSimulatorData.medicalExpenses,
+          medicalGeneral: taxSimulatorData.medicalGeneral,
+          medicalSenior: taxSimulatorData.medicalSenior,
+          medicalInfertility: taxSimulatorData.medicalInfertility,
           pensionSavings: taxSimulatorData.pensionSavings,
           irpAmount: taxSimulatorData.irpAmount,
+          childDependents: taxSimulatorData.childDependents || taxSimulatorData.dependents,
         });
         fileName = await generateYearEndTaxReport({
           taxResult,
@@ -1181,30 +1262,107 @@ const ReceiptFinancePlatform = () => {
   const [taxSimulatorData, setTaxSimulatorData] = useState({
     annualIncome: 50000000,
     dependents: 0,
+    childDependents: 0,
     hasSpouse: false,
-    medicalExpenses: 0,
-    educationExpenses: 0,
+    medicalExpenses: 0, // 간단 입력용 합계
+    medicalGeneral: 0,
+    medicalInfertility: 0,
+    medicalSenior: 0,
+    educationTotal: 0, // 간단 입력용 합계
+    educationSelf: 0,
+    educationChild: 0,
+    educationUniversity: 0,
     pensionSavings: 0,
     irpAmount: 0,
-    donations: 0,
+    donationsSimple: 0, // 간단 입력용 합계
+    donationsLegal: 0,
+    donationsDesignated: 0,
+    donationsReligious: 0,
+    donationsPolitical: 0,
+    insuranceNational: 0,
+    insuranceHealth: 0,
+    insuranceEmployment: 0,
+    housingDeduction: 0,
   });
 
   const [taxSimulatorResult, setTaxSimulatorResult] = useState(null);
 
   // 연말정산 계산
   const calculateTaxSimulation = () => {
+    const medicalAdvancedTotal = (taxSimulatorData.medicalGeneral || 0) + (taxSimulatorData.medicalInfertility || 0) + (taxSimulatorData.medicalSenior || 0);
+    const medicalTotal = medicalAdvancedTotal > 0 ? medicalAdvancedTotal : (taxSimulatorData.medicalExpenses || 0);
+    const hasInfertility = (taxSimulatorData.medicalInfertility || 0) > 0;
+
+    const educationAdvanced = {
+      self: taxSimulatorData.educationSelf || 0,
+      preschool: taxSimulatorData.educationChild || 0,
+      elementary: 0,
+      highschool: 0,
+      university: taxSimulatorData.educationUniversity || 0,
+    };
+    const hasAdvancedEducation = Object.values(educationAdvanced).some(v => v > 0);
+    const educationExpenses = hasAdvancedEducation
+      ? educationAdvanced
+      : { self: taxSimulatorData.educationTotal || 0 };
+
+    const donationAdvanced = {
+      legal: taxSimulatorData.donationsLegal || 0,
+      designated: taxSimulatorData.donationsDesignated || 0,
+      religious: taxSimulatorData.donationsReligious || 0,
+      political: taxSimulatorData.donationsPolitical || 0,
+    };
+    const hasAdvancedDonations = Object.values(donationAdvanced).some(v => v > 0);
+    const donations = hasAdvancedDonations
+      ? donationAdvanced
+      : { designated: taxSimulatorData.donationsSimple || 0 };
+
+    const insurancePremiums = {
+      national: taxSimulatorData.insuranceNational || 0,
+      health: taxSimulatorData.insuranceHealth || 0,
+      employment: taxSimulatorData.insuranceEmployment || 0,
+    };
+    const childDependents = taxSimulatorData.childDependents || taxSimulatorData.dependents || 0;
+
     const result = calculateIndividualTax({
       annualIncome: taxSimulatorData.annualIncome,
       dependents: taxSimulatorData.dependents,
       hasSpouse: taxSimulatorData.hasSpouse,
-      medicalExpenses: taxSimulatorData.medicalExpenses,
+      medicalExpenses: medicalTotal,
+      medicalGeneral: taxSimulatorData.medicalGeneral || 0,
+      medicalSenior: taxSimulatorData.medicalSenior || 0,
+      medicalInfertility: taxSimulatorData.medicalInfertility || 0,
+      educationExpenses,
+      donations,
       pensionSavings: taxSimulatorData.pensionSavings,
       irpAmount: taxSimulatorData.irpAmount,
+      insurancePremiums,
+      housingDeduction: taxSimulatorData.housingDeduction || 0,
+      hasInfertility,
+      childDependents,
     });
-    setTaxSimulatorResult(result);
+    setTaxSimulatorResult({
+      ...result,
+      meta: {
+        medicalTotal,
+        educationExpenses,
+        donations,
+        insurancePremiums,
+        hasInfertility,
+        childDependents,
+      },
+    });
   };
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+  const chartPalette = useMemo(() => [
+    activeTheme.primary,
+    NEON_ICE,
+    ACCENT_GOLD,
+    SUCCESS_GREEN,
+    BRAND_COLOR,
+    PRIMARY_BLUE,
+    '#FF6B6B',
+    '#845EC2',
+  ], [activeTheme]);
 
   const pieChartData = Object.entries(stats.categorySpending).map(([category, amount]) => ({
     name: category,
@@ -1273,34 +1431,74 @@ const ReceiptFinancePlatform = () => {
     return Array.from(banks).sort();
   }, [linkedAccounts, autoTransactions]);
 
-  // Get Tax Health Score color
+  // Get Tax Health Score color (Flat Design - Solid Colors)
   const getTaxHealthColor = (score) => {
-    if (score >= 90) return { bg: 'from-green-500 to-emerald-500', text: 'text-green-600' };
-    if (score >= 70) return { bg: 'from-blue-500 to-cyan-500', text: 'text-blue-600' };
-    if (score >= 50) return { bg: 'from-yellow-500 to-orange-500', text: 'text-yellow-600' };
-    return { bg: 'from-red-500 to-pink-500', text: 'text-red-600' };
+    if (score >= 90) return { bg: SUCCESS_GREEN, text: BRAND_COLOR };
+    if (score >= 70) return { bg: PRIMARY_BLUE, text: '#FFFFFF' };
+    if (score >= 50) return { bg: ACCENT_GOLD, text: BRAND_COLOR };
+    return { bg: '#FF4757', text: '#FFFFFF' };
   };
 
   const taxHealthColor = getTaxHealthColor(taxHealthScore);
+
+  // 세부 Tax Health 점수 계산 (캐시노트 방식 참고 - 규칙 기반)
+  const detailedTaxHealthScores = useMemo(() => {
+    return calculateDetailedTaxHealthScores({
+      deductionTracker,
+      transactions: [...receipts, ...autoTransactions],
+      receipts,
+      annualIncome: userProfile.annualIncome || 50000000,
+      prepaidTax: 0, // 기납부세액 (원천징수된 세금)
+      userType,
+      dependents: userProfile.dependents || 0,
+      hasSpouse: userProfile.hasSpouse || false,
+      hasBasicDocuments: Object.values(documentSpace).some(d => d.count > 0),
+      hasUnverifiedTransactions: receipts.some(t => !t.verified),
+      taxDeadlineDays: (() => {
+        // 연말정산: 2월 말, 종합소득세: 5월 말
+        const now = new Date();
+        const yearEndDeadline = new Date(now.getFullYear() + 1, 1, 28); // 다음해 2월 28일
+        const compTaxDeadline = new Date(now.getFullYear(), 4, 31); // 5월 31일
+        const deadline = userType === 'individual' ? yearEndDeadline : compTaxDeadline;
+        return Math.max(0, Math.ceil((deadline - now) / (1000 * 60 * 60 * 24)));
+      })(),
+    });
+  }, [deductionTracker, autoTransactions, receipts, userProfile, userType, documentSpace]);
 
   // Dashboard View
   const DashboardView = () => (
     <div className="space-y-6">
       {/* User Profile with Tax Health Score */}
-      <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 rounded-xl p-6 text-white">
+      <div
+        className="rounded-xl p-6 text-white shadow-flat-md"
+        style={{ backgroundColor: activeTheme.primary }}
+      >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-full flex items-center justify-center relative">
               <Crown className="w-10 h-10" />
-              <div className="absolute -bottom-1 bg-yellow-400 text-purple-900 px-2 py-0.5 rounded-full text-xs font-bold">
+              <div
+                className="absolute -bottom-1 px-2 py-0.5 rounded-full text-xs font-bold"
+                style={{ backgroundColor: ACCENT_GOLD, color: activeTheme.primary }}
+              >
                 Lv.{userProfile.level}
               </div>
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <h2 className="text-2xl font-bold">{userProfile.name}</h2>
-                {isPremium && <span className="bg-yellow-400 text-purple-900 px-2 py-0.5 rounded-full text-xs font-bold">PRO</span>}
-                <span className={"px-2 py-0.5 rounded-full text-xs font-bold " + (userType === 'individual' ? 'bg-blue-400 text-blue-900' : 'bg-purple-400 text-purple-900')}>
+                {isPremium && (
+                  <span
+                    className="px-2 py-0.5 rounded-full text-xs font-bold"
+                    style={{ backgroundColor: ACCENT_GOLD, color: activeTheme.primary }}
+                  >
+                    PRO
+                  </span>
+                )}
+                <span
+                  className="px-2 py-0.5 rounded-full text-xs font-bold"
+                  style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)', color: '#fff' }}
+                >
                   {userType === 'individual' ? '개인' : '사업자'}
                 </span>
                 <button 
@@ -1337,8 +1535,8 @@ const ReceiptFinancePlatform = () => {
           </div>
           <div className="w-full bg-white/20 rounded-full h-3">
             <div
-              className="bg-gradient-to-r from-yellow-400 to-orange-400 h-3 rounded-full transition-all"
-              style={{ width: `${(userProfile.currentExp / userProfile.expToNextLevel) * 100}%` }}
+              className="h-3 rounded-full transition-all"
+              style={{ width: `${(userProfile.currentExp / userProfile.expToNextLevel) * 100}%`, backgroundColor: ACCENT_GOLD }}
             />
           </div>
         </div>
@@ -1346,7 +1544,7 @@ const ReceiptFinancePlatform = () => {
 
       {/* AI Insights - Critical First */}
       {aiInsights.filter(i => i.priority === 'high').length > 0 && (
-        <div className="bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-300 rounded-xl p-4 animate-pulse">
+        <div className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4 animate-pulse">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
               <AlertTriangle className="w-6 h-6 text-white" />
@@ -1396,17 +1594,24 @@ const ReceiptFinancePlatform = () => {
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-blue-500" />
             <h3 className="font-bold text-lg">Tax Health Score™</h3>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${taxHealthScore >= 90 ? 'bg-green-100 text-green-700' :
-                taxHealthScore >= 70 ? 'bg-blue-100 text-blue-700' :
-                  taxHealthScore >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-red-100 text-red-700'
-              }`}>
+            <span
+              className="text-xs px-2 py-0.5 rounded-full"
+              style={{
+                backgroundColor: taxHealthScore >= 90 ? `${SUCCESS_GREEN}30` :
+                  taxHealthScore >= 70 ? `${PRIMARY_BLUE}20` :
+                    taxHealthScore >= 50 ? `${ACCENT_GOLD}30` : '#FFE6E8',
+                color: taxHealthScore >= 90 ? SUCCESS_GREEN :
+                  taxHealthScore >= 70 ? PRIMARY_BLUE :
+                    taxHealthScore >= 50 ? '#806B00' : '#CC1F2D'
+              }}
+            >
               {taxHealthScore >= 90 ? '최상' : taxHealthScore >= 70 ? '양호' : taxHealthScore >= 50 ? '보통' : '주의'}
             </span>
           </div>
           <button
             onClick={() => setShowPDFReportModal(true)}
-            className="text-sm bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100 transition flex items-center gap-1"
+            className="text-sm px-3 py-1 rounded-lg hover:opacity-80 transition flex items-center gap-1"
+            style={{ backgroundColor: activeTheme.soft, color: activeTheme.primary }}
           >
             <Download className="w-4 h-4" />
             리포트 다운로드
@@ -1462,126 +1667,130 @@ const ReceiptFinancePlatform = () => {
                 <Line
                   type="monotone"
                   dataKey="score"
-                  stroke="#3b82f6"
+                  stroke={activeTheme.primary}
                   strokeWidth={2}
-                  dot={{ fill: '#3b82f6', strokeWidth: 2 }}
+                  dot={{ fill: activeTheme.primary, strokeWidth: 2 }}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
-          {/* 상세 항목 */}
+          {/* 점수 향상 제안 알림 */}
           <div className="space-y-2">
-            <div className="text-sm font-semibold text-gray-700 mb-2">상세 항목</div>
-            {(() => {
-              const deductionUsage = Object.keys(deductionTracker).length > 0
-                ? Math.round(Object.values(deductionTracker).reduce((sum, item) =>
-                  sum + (item.current / item.maxDeduction), 0) / Object.keys(deductionTracker).length * 100)
-                : 85;
-              const documentCount = Object.values(deductionTracker).reduce((sum, item) => sum + (item.documents || 0), 0);
-              const docCompleteness = Math.min(100, Math.round(documentCount / 30 * 100));
-
-              return (
-                <>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${deductionUsage >= 70 ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                      <span className="text-xs">공제 활용도</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full ${deductionUsage >= 70 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ width: `${deductionUsage}%` }}></div>
-                      </div>
-                      <span className="text-xs font-bold w-8">{deductionUsage}%</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${docCompleteness >= 70 ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                      <span className="text-xs">증빙 완성도</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full ${docCompleteness >= 70 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ width: `${docCompleteness}%` }}></div>
-                      </div>
-                      <span className="text-xs font-bold w-8">{docCompleteness}%</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                      <span className="text-xs">납부 이력</span>
-                    </div>
-                    <span className="text-xs font-bold text-green-600">양호</span>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${userProfile.streak >= 7 ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                      <span className="text-xs">관리 꾸준함</span>
-                    </div>
-                    <span className={`text-xs font-bold ${userProfile.streak >= 7 ? 'text-green-600' : 'text-yellow-600'}`}>
-                      {userProfile.streak >= 7 ? '우수' : '보통'}
-                    </span>
-                  </div>
-                </>
-              );
-            })()}
+            <div className="text-sm font-semibold text-gray-700 mb-2">점수 향상 제안</div>
+            {taxHealthScore < 90 && Object.keys(deductionTracker).length < 5 && (
+              <div className="bg-yellow-50 rounded-lg p-2 border border-yellow-200">
+                <div className="text-xs font-semibold text-yellow-800">공제 항목 추가 +5점</div>
+                <div className="text-[10px] text-yellow-700">의료비, 교육비 등 등록</div>
+              </div>
+            )}
+            {taxHealthScore < 85 && (
+              <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
+                <div className="text-xs font-semibold text-blue-800">증빙 자료 업로드 +8점</div>
+                <div className="text-[10px] text-blue-700">영수증 추가 등록</div>
+              </div>
+            )}
+            {userProfile.streak < 7 && (
+              <div className="bg-green-50 rounded-lg p-2 border border-green-200">
+                <div className="text-xs font-semibold text-green-800">꾸준히 관리 +3점</div>
+                <div className="text-[10px] text-green-700">매일 출석하기</div>
+              </div>
+            )}
+            {taxHealthScore >= 90 && (
+              <div className="bg-green-50 rounded-lg p-2 border border-green-200">
+                <div className="text-xs font-semibold text-green-800">최상 상태! 👏</div>
+                <div className="text-[10px] text-green-700">세금 관리를 잘 하고 계세요</div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 개선 제안 */}
-        {taxHealthScore < 90 && (
-          <div className="mt-6 pt-4 border-t">
-            <div className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <Lightbulb className="w-4 h-4 text-yellow-500" />
-              점수 향상 제안
-            </div>
-            <div className="grid md:grid-cols-3 gap-3">
-              {taxHealthScore < 90 && Object.keys(deductionTracker).length < 5 && (
-                <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200">
-                  <div className="text-xs font-semibold text-yellow-800 mb-1">공제 항목 추가</div>
-                  <div className="text-xs text-yellow-700">의료비, 교육비 등 더 많은 공제 항목을 등록하세요</div>
-                  <div className="text-[10px] text-yellow-600 mt-1">예상 +5점</div>
+        {/* 4개 카테고리 세부 점수 (캐시노트 방식 참고 - 규칙 기반 산출) */}
+        <div className="mt-6 pt-4 border-t">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              {
+                name: '세금 리스크',
+                score: detailedTaxHealthScores.taxRisk.score,
+                status: detailedTaxHealthScores.taxRisk.status,
+                color: detailedTaxHealthScores.taxRisk.statusColor,
+                icon: AlertTriangle,
+                tooltip: '증빙 누락, 한도 초과, 업종 평균 대비 이상치 등을 분석',
+              },
+              {
+                name: '증빙 완성도',
+                score: detailedTaxHealthScores.documentation.score,
+                status: detailedTaxHealthScores.documentation.status,
+                color: detailedTaxHealthScores.documentation.statusColor,
+                icon: FileText,
+                tooltip: '공제 금액 대비 증빙 서류 업로드 비율',
+              },
+              {
+                name: '환급 가능성',
+                score: detailedTaxHealthScores.refundPotential.score,
+                status: detailedTaxHealthScores.refundPotential.status,
+                color: detailedTaxHealthScores.refundPotential.statusColor,
+                icon: TrendingUp,
+                tooltip: detailedTaxHealthScores.refundPotential.tip,
+              },
+              {
+                name: '절세 여력',
+                score: detailedTaxHealthScores.savingsPotential.score,
+                status: detailedTaxHealthScores.savingsPotential.status,
+                color: detailedTaxHealthScores.savingsPotential.statusColor,
+                icon: Target,
+                tooltip: `추가 절세 가능: ₩${detailedTaxHealthScores.savingsPotential.totalPotentialSavings.toLocaleString()}`,
+              },
+            ].map((cat, idx) => {
+              const Icon = cat.icon;
+              return (
+                <div key={idx} className="bg-gray-50 rounded-lg p-3 group relative" title={cat.tooltip}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`w-6 h-6 bg-${cat.color}-100 rounded flex items-center justify-center`}>
+                      <Icon className={`w-3 h-3 text-${cat.color}-600`} />
+                    </div>
+                    <span className="font-semibold text-xs">{cat.name}</span>
+                  </div>
+                  <div className="flex items-end justify-between">
+                    <span className={`text-xl font-bold text-${cat.color}-600`}>{cat.score}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 bg-${cat.color}-100 text-${cat.color}-700 rounded`}>{cat.status}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1 mt-1">
+                    <div className={`h-1 rounded-full bg-${cat.color}-500`} style={{ width: `${cat.score}%` }} />
+                  </div>
                 </div>
-              )}
-              {taxHealthScore < 85 && (
-                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                  <div className="text-xs font-semibold text-blue-800 mb-1">증빙 자료 업로드</div>
-                  <div className="text-xs text-blue-700">영수증과 증빙 자료를 더 등록해주세요</div>
-                  <div className="text-[10px] text-blue-600 mt-1">예상 +8점</div>
-                </div>
-              )}
-              {userProfile.streak < 7 && (
-                <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-                  <div className="text-xs font-semibold text-green-800 mb-1">꾸준히 관리하기</div>
-                  <div className="text-xs text-green-700">매일 출석하고 지출을 기록하세요</div>
-                  <div className="text-[10px] text-green-600 mt-1">예상 +3점</div>
-                </div>
-              )}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
       </div>
 
       {/* 유저타입별 세금 핵심 정보 */}
-      <div className={"rounded-xl p-6 shadow-sm border " + (userType === 'individual' ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200' : 'bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200')}>
+      <div
+        className="rounded-xl p-6 shadow-flat border"
+        style={{
+          backgroundColor: userType === 'individual' ? '#E6F2FF' : '#F3E8FF',
+          borderColor: userType === 'individual' ? PRIMARY_BLUE : BRAND_COLOR
+        }}
+      >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             {userType === 'individual' ? (
               <>
-                <User className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-lg text-blue-900">개인 연말정산 현황</h3>
+                <User className="w-5 h-5" style={{ color: PRIMARY_BLUE }} />
+                <h3 className="font-bold text-lg" style={{ color: BRAND_COLOR }}>개인 연말정산 현황</h3>
               </>
             ) : (
               <>
-                <Briefcase className="w-5 h-5 text-purple-600" />
-                <h3 className="font-bold text-lg text-purple-900">사업자 세금 현황</h3>
+                <Briefcase className="w-5 h-5" style={{ color: BRAND_COLOR }} />
+                <h3 className="font-bold text-lg" style={{ color: BRAND_COLOR }}>사업자 세금 현황</h3>
               </>
             )}
           </div>
           <button
             onClick={() => setShowTaxSimulatorModal(true)}
-            className={"text-sm px-3 py-1 rounded-lg transition flex items-center gap-1 " + (userType === 'individual' ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-purple-500 text-white hover:bg-purple-600')}
+            className="text-sm px-3 py-1 rounded-lg transition flex items-center gap-1 text-white hover:opacity-90"
+            style={{ backgroundColor: userType === 'individual' ? PRIMARY_BLUE : BRAND_COLOR }}
           >
             <Calculator className="w-4 h-4" />
             {userType === 'individual' ? '연말정산 시뮬레이터' : '종합소득세 계산'}
@@ -1592,131 +1801,54 @@ const ReceiptFinancePlatform = () => {
           /* 개인 사용자 - 연말정산 정보 */
           <div className="grid md:grid-cols-3 gap-4">
             <div className="bg-white/70 rounded-lg p-4">
-              <div className="text-sm text-blue-700 mb-1">예상 환급액</div>
-              <div className="text-2xl font-bold text-blue-900">₩{((stats.taxEstimate || 0) * 0.15).toLocaleString()}</div>
-              <div className="text-xs text-blue-600 mt-1">공제 활용 시 예상</div>
+              <div className="text-sm mb-1" style={{ color: PRIMARY_BLUE }}>예상 환급액</div>
+              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>₩{((stats.taxEstimate || 0) * 0.15).toLocaleString()}</div>
+              <div className="text-xs mt-1" style={{ color: PRIMARY_BLUE }}>공제 활용 시 예상</div>
             </div>
             <div className="bg-white/70 rounded-lg p-4">
-              <div className="text-sm text-blue-700 mb-1">공제 가능 총액</div>
-              <div className="text-2xl font-bold text-blue-900">₩{Object.values(deductionTracker).reduce((sum, d) => sum + d.current, 0).toLocaleString()}</div>
-              <div className="text-xs text-blue-600 mt-1">{Object.keys(deductionTracker).length}개 항목</div>
+              <div className="text-sm mb-1" style={{ color: PRIMARY_BLUE }}>공제 가능 총액</div>
+              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>₩{Object.values(deductionTracker).reduce((sum, d) => sum + d.current, 0).toLocaleString()}</div>
+              <div className="text-xs mt-1" style={{ color: PRIMARY_BLUE }}>{Object.keys(deductionTracker).length}개 항목</div>
             </div>
             <div className="bg-white/70 rounded-lg p-4">
-              <div className="text-sm text-blue-700 mb-1">신고 마감까지</div>
-              <div className="text-2xl font-bold text-blue-900">D-{Math.max(0, Math.floor((new Date('2026-02-28') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
-              <div className="text-xs text-blue-600 mt-1">연말정산 마감</div>
+              <div className="text-sm mb-1" style={{ color: PRIMARY_BLUE }}>신고 마감까지</div>
+              <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>D-{Math.max(0, Math.floor((new Date('2026-02-28') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
+              <div className="text-xs mt-1" style={{ color: PRIMARY_BLUE }}>연말정산 마감</div>
             </div>
           </div>
         ) : (
           /* 소상공인 - 사업자 세금 정보 */
           <div className="grid md:grid-cols-3 gap-4">
             <div className="bg-white/70 rounded-lg p-4">
-              <div className="text-sm text-purple-700 mb-1">예상 종합소득세</div>
-              <div className="text-2xl font-bold text-purple-900">₩{(stats.taxEstimate || 0).toLocaleString()}</div>
-              <div className="text-xs text-purple-600 mt-1">올해 예상 납부액</div>
+              <div className="text-sm mb-1" style={{ color: BRAND_COLOR }}>예상 종합소득세</div>
+              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>₩{(stats.taxEstimate || 0).toLocaleString()}</div>
+              <div className="text-xs mt-1" style={{ color: BRAND_COLOR, opacity: 0.7 }}>올해 예상 납부액</div>
             </div>
             <div className="bg-white/70 rounded-lg p-4">
-              <div className="text-sm text-purple-700 mb-1">이번 달 매출</div>
-              <div className="text-2xl font-bold text-purple-900">₩{stats.totalSpent.toLocaleString()}</div>
-              <div className="text-xs text-purple-600 mt-1">지출 기준</div>
+              <div className="text-sm mb-1" style={{ color: BRAND_COLOR }}>이번 달 매출</div>
+              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>₩{stats.totalSpent.toLocaleString()}</div>
+              <div className="text-xs mt-1" style={{ color: BRAND_COLOR, opacity: 0.7 }}>지출 기준</div>
             </div>
             <div className="bg-white/70 rounded-lg p-4">
-              <div className="text-sm text-purple-700 mb-1">부가세 신고까지</div>
-              <div className="text-2xl font-bold text-purple-900">D-{Math.max(0, Math.floor((new Date('2026-01-25') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
-              <div className="text-xs text-purple-600 mt-1">2기 확정신고</div>
+              <div className="text-sm mb-1" style={{ color: BRAND_COLOR }}>부가세 신고까지</div>
+              <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>D-{Math.max(0, Math.floor((new Date('2026-01-25') - new Date()) / (1000 * 60 * 60 * 24)))}</div>
+              <div className="text-xs mt-1" style={{ color: BRAND_COLOR, opacity: 0.7 }}>2기 확정신고</div>
             </div>
           </div>
         )}
-      </div>
-
-      {/* Tax Health Score 상세 분석 */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border">
-        <div className="flex items-center gap-2 mb-4">
-          <Heart className="w-6 h-6 text-red-500" />
-          <h3 className="font-bold text-lg">Tax Health Score™ 상세</h3>
-        </div>
-
-        {/* 카테고리별 점수 */}
-        <div className="grid md:grid-cols-4 gap-4 mb-6">
-          {[
-            { name: '세금 리스크', score: Math.min(100, taxHealthScore + 7), status: '양호', color: 'green', icon: AlertTriangle },
-            { name: '증빙 완성도', score: Math.max(50, taxHealthScore - 13), status: taxHealthScore >= 70 ? '양호' : '주의', color: taxHealthScore >= 70 ? 'blue' : 'orange', icon: FileText },
-            { name: '환급 가능성', score: Math.min(100, taxHealthScore + 4), status: '우수', color: 'blue', icon: TrendingUp },
-            { name: '절세 여력', score: Math.max(50, taxHealthScore - 8), status: '보통', color: 'purple', icon: Target },
-          ].map((cat, idx) => {
-            const Icon = cat.icon;
-            return (
-              <div key={idx} className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`w-8 h-8 bg-${cat.color}-100 rounded-lg flex items-center justify-center`}>
-                    <Icon className={`w-4 h-4 text-${cat.color}-600`} />
-                  </div>
-                  <span className="font-semibold text-sm">{cat.name}</span>
-                </div>
-                <div className="flex items-end justify-between">
-                  <span className={`text-2xl font-bold text-${cat.color}-600`}>{cat.score}</span>
-                  <span className={`text-xs px-2 py-1 bg-${cat.color}-100 text-${cat.color}-700 rounded`}>{cat.status}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
-                  <div className={`h-1.5 rounded-full bg-${cat.color}-500`} style={{ width: `${cat.score}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 점수 변화 추이 */}
-        <div className="mb-4">
-          <div className="text-sm font-semibold text-gray-700 mb-2">최근 6개월 점수 변화</div>
-          <div className="flex items-end justify-between h-32 gap-2">
-            {[
-              { month: '6월', score: Math.max(50, taxHealthScore - 13) },
-              { month: '7월', score: Math.max(55, taxHealthScore - 10) },
-              { month: '8월', score: Math.max(60, taxHealthScore - 6) },
-              { month: '9월', score: Math.max(65, taxHealthScore - 3) },
-              { month: '10월', score: Math.max(70, taxHealthScore - 1) },
-              { month: '11월', score: taxHealthScore },
-            ].map((item, idx) => (
-              <div key={idx} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full bg-gradient-to-t from-blue-500 to-purple-500 rounded-t transition-all hover:from-blue-600 hover:to-purple-600"
-                  style={{ height: `${(item.score / 100) * 100}%` }}
-                />
-                <div className="text-xs font-semibold">{item.score}</div>
-                <div className="text-xs text-gray-500">{item.month}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 개선 제안 */}
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-          <div className="flex items-start gap-2">
-            <Lightbulb className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="font-semibold text-orange-900 mb-1">맞춤형 개선 제안</div>
-              <p className="text-sm text-orange-700">
-                {taxHealthScore < 70
-                  ? '의료비 증빙을 추가하면 점수를 +5점 올릴 수 있습니다.'
-                  : taxHealthScore < 85
-                    ? '신용카드 사용 비율을 25% 이상으로 맞추면 추가 공제가 가능합니다.'
-                    : '현재 세금 관리 상태가 매우 좋습니다! 계속 유지하세요.'}
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Deduction Tracker */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Target className="w-5 h-5 text-purple-500" />
+            <Target className="w-5 h-5" style={{ color: BRAND_COLOR }} />
             <h3 className="font-bold text-lg">{userType === 'individual' ? '공제 항목 실시간 추적' : '필요경비 추적'}</h3>
           </div>
           <button
             onClick={() => setShowDocSpaceModal(true)}
-            className="text-sm text-purple-600 hover:text-purple-700 transition flex items-center gap-1"
+            className="text-sm hover:opacity-80 transition flex items-center gap-1"
+            style={{ color: BRAND_COLOR }}
           >
             <Folder className="w-4 h-4" />
             증빙 서류 보기
@@ -1753,7 +1885,7 @@ const ReceiptFinancePlatform = () => {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className={`h-2 rounded-full bg-gradient-to-r from-${item.color}-400 to-${item.color}-600`}
+                      className={`h-2 rounded-full bg-${item.color}-500`}
                       style={{ width: `${Math.min(progress, 100)}%` }}
                     />
                   </div>
@@ -1771,7 +1903,7 @@ const ReceiptFinancePlatform = () => {
       </div>
 
       {/* AI 공제 추천 */}
-      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border-2 border-indigo-200">
+      <div className="bg-indigo-50 rounded-xl p-6 border-2 border-indigo-200">
         <div className="flex items-center gap-2 mb-4">
           <Lightbulb className="w-5 h-5 text-indigo-600" />
           <h3 className="font-bold text-lg text-indigo-900">AI 공제 추천</h3>
@@ -1806,13 +1938,13 @@ const ReceiptFinancePlatform = () => {
           {(deductionTracker.education?.current || 0) < 1000000 && (
             <div className="bg-white rounded-lg p-4 border border-indigo-100 hover:border-indigo-300 transition">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <GraduationCap className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${PRIMARY_BLUE}20` }}>
+                  <GraduationCap className="w-5 h-5" style={{ color: PRIMARY_BLUE }} />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-semibold text-gray-900">교육비 공제 놓치지 마세요</span>
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">최대 15% 공제</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${PRIMARY_BLUE}20`, color: PRIMARY_BLUE }}>최대 15% 공제</span>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
                     학원비, 온라인 강의, 자격증 취득 비용도 교육비 공제 대상입니다.
@@ -1853,13 +1985,13 @@ const ReceiptFinancePlatform = () => {
           {/* 연금/보험 추천 */}
           <div className="bg-white rounded-lg p-4 border border-indigo-100 hover:border-indigo-300 transition">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Shield className="w-5 h-5 text-purple-600" />
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${BRAND_COLOR}20` }}>
+                <Shield className="w-5 h-5" style={{ color: BRAND_COLOR }} />
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold text-gray-900">연금저축/IRP 활용하기</span>
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">최대 16.5% 공제</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${BRAND_COLOR}20`, color: BRAND_COLOR }}>최대 16.5% 공제</span>
                 </div>
                 <p className="text-sm text-gray-600 mb-2">
                   연금저축과 IRP에 연간 700만원까지 납입하면 최대 115.5만원 절세됩니다.
@@ -1874,48 +2006,18 @@ const ReceiptFinancePlatform = () => {
         </div>
 
         <div className="mt-4 text-center">
-          <button className="bg-indigo-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-indigo-600 transition flex items-center gap-2 mx-auto">
+          <button className="text-white px-6 py-2 rounded-lg font-semibold hover:opacity-90 transition flex items-center gap-2 mx-auto" style={{ backgroundColor: PRIMARY_BLUE }}>
             <Sparkles className="w-4 h-4" />
             전체 절세 전략 보기
           </button>
         </div>
       </div>
 
-      {/* Account Linking Status */}
-      {linkedAccounts.length > 0 && (
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Link className="w-6 h-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="font-bold text-green-900">금융 계좌 연동 중</h3>
-                <span className="bg-green-500 text-white px-2 py-0.5 rounded-full text-xs font-bold">
-                  {linkedAccounts.length}개
-                </span>
-              </div>
-              <p className="text-sm text-green-800 mb-2">
-                자동으로 거래 내역을 불러오고 있습니다. 수동 입력 시간 <span className="font-bold">95% 절감!</span>
-              </p>
-              <div className="flex items-center gap-2">
-                {linkedAccounts.slice(0, 3).map(acc => (
-                  <div key={acc.id} className="text-2xl">{acc.icon}</div>
-                ))}
-                {linkedAccounts.length > 3 && (
-                  <span className="text-sm text-green-700">+{linkedAccounts.length - 3}개</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Attendance Check */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-blue-500" />
+            <Calendar className="w-5 h-5" style={{ color: PRIMARY_BLUE }} />
             <h3 className="font-bold text-lg">출석 체크</h3>
           </div>
           <button
@@ -1923,8 +2025,9 @@ const ReceiptFinancePlatform = () => {
             disabled={attendanceChecked.every(d => d)}
             className={`px-4 py-2 rounded-lg font-semibold transition ${attendanceChecked.every(d => d)
               ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-500 text-white hover:bg-blue-600'
+              : 'text-white hover:opacity-90'
               }`}
+            style={!attendanceChecked.every(d => d) ? { backgroundColor: PRIMARY_BLUE } : {}}
           >
             {attendanceChecked.every(d => d) ? '완료' : '출석 체크 +50P'}
           </button>
@@ -1933,10 +2036,12 @@ const ReceiptFinancePlatform = () => {
           {['월', '화', '수', '목', '금', '토', '일'].map((day, idx) => (
             <div key={idx} className="text-center">
               <div className="text-xs text-gray-500 mb-2">{day}</div>
-              <div className={`w-full aspect-square rounded-lg flex items-center justify-center ${attendanceChecked[idx]
-                ? 'bg-gradient-to-br from-blue-500 to-purple-500 text-white'
+              <div
+                className={`w-full aspect-square rounded-lg flex items-center justify-center ${attendanceChecked[idx]
+                ? 'text-white'
                 : 'bg-gray-100 text-gray-400'
-                }`}>
+                }`}
+                style={attendanceChecked[idx] ? { backgroundColor: PRIMARY_BLUE } : {}}>
                 {attendanceChecked[idx] ? (
                   <CheckCircle className="w-6 h-6" />
                 ) : (
@@ -1948,39 +2053,9 @@ const ReceiptFinancePlatform = () => {
         </div>
       </div>
 
-      {/* Daily Missions */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border">
-        <div className="flex items-center gap-2 mb-4">
-          <Target className="w-5 h-5 text-green-500" />
-          <h3 className="font-bold text-lg">오늘의 미션</h3>
-        </div>
-        <div className="space-y-3">
-          {dailyMissions.map(mission => (
-            <div key={mission.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div className="flex-1">
-                <div className="font-semibold text-sm mb-1">{mission.title}</div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-white rounded-full h-2">
-                    <div
-                      className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full"
-                      style={{ width: `${(mission.progress / mission.target) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-600">{mission.progress}/{mission.target}</span>
-                </div>
-              </div>
-              <div className="ml-4 text-right">
-                <div className="text-xs text-gray-500">보상</div>
-                <div className="font-bold text-green-600">+{mission.reward}P</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white">
+        <div className="rounded-xl p-4 text-white shadow-flat" style={{ backgroundColor: PRIMARY_BLUE }}>
           <div className="flex items-center justify-between mb-2">
             <Wallet className="w-5 h-5" />
             <span className="text-xs bg-white/20 px-2 py-1 rounded-full">이번 달</span>
@@ -1989,16 +2064,16 @@ const ReceiptFinancePlatform = () => {
           <div className="text-xs opacity-80">총 지출</div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-4 text-white">
+        <div className="rounded-xl p-4 shadow-flat" style={{ backgroundColor: SUCCESS_GREEN, color: BRAND_COLOR }}>
           <div className="flex items-center justify-between mb-2">
             <TrendingUp className="w-5 h-5" />
-            <span className="text-xs bg-white/20 px-2 py-1 rounded-full">절감액</span>
+            <span className="text-xs bg-white/30 px-2 py-1 rounded-full">절감액</span>
           </div>
           <div className="text-2xl font-bold">₩{Math.floor(userProfile.totalSaved / 1000)}K</div>
           <div className="text-xs opacity-80">누적 절감</div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white">
+        <div className="rounded-xl p-4 text-white shadow-flat" style={{ backgroundColor: BRAND_COLOR }}>
           <div className="flex items-center justify-between mb-2">
             <Trophy className="w-5 h-5" />
             <span className="text-xs bg-white/20 px-2 py-1 rounded-full">배지</span>
@@ -2007,149 +2082,46 @@ const ReceiptFinancePlatform = () => {
           <div className="text-xs opacity-80">획득 완료</div>
         </div>
 
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-4 text-white">
+        <div className="rounded-xl p-4 shadow-flat" style={{ backgroundColor: ACCENT_GOLD, color: BRAND_COLOR }}>
           <div className="flex items-center justify-between mb-2">
             <Gift className="w-5 h-5" />
-            <span className="text-xs bg-white/20 px-2 py-1 rounded-full">포인트</span>
+            <span className="text-xs bg-white/30 px-2 py-1 rounded-full">포인트</span>
           </div>
           <div className="text-2xl font-bold">{userProfile.points.toLocaleString()}P</div>
           <div className="text-xs opacity-80">사용 가능</div>
         </div>
       </div>
 
-      {/* Charts */}
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="font-bold text-lg mb-4">카테고리별 지출</h3>
-          {pieChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <RechartsPie>
-                <Pie
-                  data={pieChartData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {pieChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => `₩${value.toLocaleString()}`} />
-              </RechartsPie>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400">
-              데이터가 없습니다
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="font-bold text-lg mb-4">예산 사용 현황</h3>
-          <div className="space-y-4">
-            {stats.budgetUsage.slice(0, 5).map((item, idx) => (
-              <div key={idx}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="font-medium">{item.category}</span>
-                  <span className="text-gray-600">
-                    ₩{item.spent.toLocaleString()} / ₩{item.budget.toLocaleString()}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full transition-all ${parseFloat(item.percentage) > 90 ? 'bg-red-500' :
-                      parseFloat(item.percentage) > 70 ? 'bg-orange-500' :
-                        'bg-green-500'
-                      }`}
-                    style={{ width: `${Math.min(parseFloat(item.percentage), 100)}%` }}
-                  />
-                </div>
-                <div className="text-xs text-gray-500 mt-1">{item.percentage}% 사용</div>
-              </div>
-            ))}
+      {/* 카테고리별 지출 - 확대 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border">
+        <h3 className="font-bold text-lg mb-4">카테고리별 지출</h3>
+        {pieChartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={350}>
+            <RechartsPie>
+              <Pie
+                data={pieChartData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                outerRadius={120}
+                fill={activeTheme.soft}
+                dataKey="value"
+              >
+                {pieChartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={chartPalette[index % chartPalette.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => `₩${value.toLocaleString()}`} />
+            </RechartsPie>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-64 flex items-center justify-center text-gray-400">
+            데이터가 없습니다
           </div>
-        </div>
+        )}
       </div>
 
-      {/* TOP 10 공제항목 체크리스트 - 개인만 표시 */}
-      {userType === 'individual' && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-6 h-6 text-green-600" />
-              <h3 className="font-bold text-lg">TOP 10 공제항목 체크</h3>
-            </div>
-            <span className="text-sm text-gray-500">{checkedDeductions.length}/10 확인</span>
-          </div>
-
-          {/* 진행 상태 바 */}
-          <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg p-4 text-white mb-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm">진행률</span>
-              <span className="font-bold">{deductionCompletionRate.toFixed(0)}%</span>
-            </div>
-            <div className="w-full bg-white/30 rounded-full h-2">
-              <div
-                className="h-2 bg-white rounded-full transition-all"
-                style={{ width: `${deductionCompletionRate}%` }}
-              />
-            </div>
-            <div className="mt-2 text-sm">
-              예상 절세액: <span className="font-bold">{(totalDeductionSavings / 10000).toFixed(0)}만원</span>
-            </div>
-          </div>
-
-          {/* 체크리스트 */}
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {deductionItems.map((item, idx) => (
-              <div
-                key={item.id}
-                onClick={() => handleDeductionCheck(item.id)}
-                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
-                  checkedDeductions.includes(item.id)
-                    ? 'bg-green-50 border-2 border-green-300'
-                    : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                  checkedDeductions.includes(item.id)
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-300'
-                }`}>
-                  {checkedDeductions.includes(item.id) ? (
-                    <Check className="w-4 h-4" />
-                  ) : (
-                    <span className="text-xs font-bold text-white">{idx + 1}</span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="font-semibold text-sm">{item.title}</div>
-                  <div className="text-xs text-gray-500">{item.tips}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-green-600">
-                    {(item.estimatedSaving / 10000).toFixed(0)}만원
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {deductionCompletionRate === 100 && (
-            <div className="mt-4 p-4 bg-green-100 rounded-lg text-center">
-              <PartyPopper className="w-8 h-8 text-green-600 mx-auto mb-2" />
-              <div className="font-bold text-green-800">모든 항목 확인 완료!</div>
-              <div className="text-sm text-green-700">
-                총 예상 절세액: {(totalDeductionSavings / 10000).toFixed(0)}만원
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 
@@ -2161,14 +2133,16 @@ const ReceiptFinancePlatform = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowValueModal(true)}
-            className="bg-purple-50 text-purple-600 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-100 transition border border-purple-200"
+            className="px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-80 transition border"
+            style={{ backgroundColor: `${BRAND_COLOR}10`, color: BRAND_COLOR, borderColor: `${BRAND_COLOR}30` }}
           >
             <Sparkles className="w-4 h-4" />
             연동 효과 보기
           </button>
           <button
             onClick={() => setShowReceiptModal(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-600 transition"
+            className="text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-90 transition"
+            style={{ backgroundColor: PRIMARY_BLUE }}
           >
             <Plus className="w-4 h-4" />
             영수증 추가
@@ -2180,12 +2154,13 @@ const ReceiptFinancePlatform = () => {
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Link className="w-5 h-5 text-blue-500" />
+            <Link className="w-5 h-5" style={{ color: PRIMARY_BLUE }} />
             <h3 className="font-bold text-lg">금융 계좌 연동</h3>
           </div>
           <button
             onClick={() => setShowAccountLinkModal(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-600 transition text-sm"
+            className="text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-90 transition text-sm"
+            style={{ backgroundColor: PRIMARY_BLUE }}
           >
             <Plus className="w-4 h-4" />
             계좌 연동하기
@@ -2203,7 +2178,8 @@ const ReceiptFinancePlatform = () => {
             </p>
             <button
               onClick={() => setShowAccountLinkModal(true)}
-              className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition"
+              className="text-white px-6 py-2 rounded-lg hover:opacity-90 transition"
+              style={{ backgroundColor: PRIMARY_BLUE }}
             >
               지금 연동하기
             </button>
@@ -2211,7 +2187,7 @@ const ReceiptFinancePlatform = () => {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {linkedAccounts.map(account => (
-              <div key={account.id} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border">
+              <div key={account.id} className="bg-gray-50 rounded-lg p-4 border shadow-flat">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="text-2xl">{account.icon}</div>
@@ -2251,7 +2227,7 @@ const ReceiptFinancePlatform = () => {
       <div className="grid md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-4 border">
           <div className="flex items-center gap-2 mb-2">
-            <FileText className="w-5 h-5 text-blue-500" />
+            <FileText className="w-5 h-5" style={{ color: PRIMARY_BLUE }} />
             <span className="text-sm text-gray-600">총 거래</span>
           </div>
           <div className="text-2xl font-bold">{stats.receiptCount}건</div>
@@ -2259,7 +2235,7 @@ const ReceiptFinancePlatform = () => {
         </div>
         <div className="bg-white rounded-lg p-4 border">
           <div className="flex items-center gap-2 mb-2">
-            <Camera className="w-5 h-5 text-purple-500" />
+            <Camera className="w-5 h-5" style={{ color: BRAND_COLOR }} />
             <span className="text-sm text-gray-600">수동 입력</span>
           </div>
           <div className="text-2xl font-bold">{stats.manualCount}건</div>
@@ -2293,7 +2269,8 @@ const ReceiptFinancePlatform = () => {
               setTransactionFilters({ dateFrom: '', dateTo: '', bank: 'all', source: 'all', category: 'all' });
               setCurrentPage(1);
             }}
-            className="ml-auto text-xs text-blue-500 hover:text-blue-700"
+            className="ml-auto text-xs hover:opacity-70"
+            style={{ color: PRIMARY_BLUE }}
           >
             필터 초기화
           </button>
@@ -2371,7 +2348,7 @@ const ReceiptFinancePlatform = () => {
         {/* 필터 결과 요약 */}
         <div className="mt-3 pt-3 border-t flex items-center justify-between">
           <div className="text-sm text-gray-600">
-            검색 결과: <span className="font-semibold text-blue-600">{totalFilteredTransactions}</span>건
+            검색 결과: <span className="font-semibold" style={{ color: PRIMARY_BLUE }}>{totalFilteredTransactions}</span>건
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">페이지당</span>
@@ -2400,12 +2377,14 @@ const ReceiptFinancePlatform = () => {
               onClick={() => handleTransactionClick(transaction)}
             >
               <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${transaction.source === 'manual' ? 'bg-purple-100' : 'bg-green-100'
-                  }`}>
+                <div
+                  className="w-12 h-12 rounded-lg flex items-center justify-center"
+                  style={{ backgroundColor: transaction.source === 'manual' ? `${BRAND_COLOR}20` : `${SUCCESS_GREEN}30` }}
+                >
                   {transaction.source === 'manual' ? (
-                    <Camera className="w-6 h-6 text-purple-500" />
+                    <Camera className="w-6 h-6" style={{ color: BRAND_COLOR }} />
                   ) : (
-                    <RefreshCw className="w-6 h-6 text-green-500" />
+                    <RefreshCw className="w-6 h-6" style={{ color: SUCCESS_GREEN }} />
                   )}
                 </div>
                 <div>
@@ -2488,9 +2467,10 @@ const ReceiptFinancePlatform = () => {
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
                     className={`w-8 h-8 rounded text-sm font-medium transition ${currentPage === pageNum
-                        ? 'bg-blue-500 text-white'
+                        ? 'text-white'
                         : 'border hover:bg-gray-100'
                       }`}
+                    style={currentPage === pageNum ? { backgroundColor: PRIMARY_BLUE } : {}}
                   >
                     {pageNum}
                   </button>
@@ -2555,13 +2535,13 @@ const ReceiptFinancePlatform = () => {
 
       {/* 월별 지출 추이 차트 */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-blue-500" />
-            <h3 className="font-bold text-lg">월별 지출 추이</h3>
-          </div>
-          <div className="text-sm text-gray-500">최근 6개월</div>
-        </div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" style={{ color: activeTheme.primary }} />
+                <h3 className="font-bold text-lg">월별 지출 추이</h3>
+              </div>
+              <div className="text-sm text-gray-500">최근 6개월</div>
+            </div>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={monthlySpendingData}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -2569,30 +2549,30 @@ const ReceiptFinancePlatform = () => {
             <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
             <Tooltip formatter={(v) => `₩${v.toLocaleString()}`} />
             <Legend />
-            <Area type="monotone" dataKey="지출" stroke="#3b82f6" fill="#93c5fd" />
-            <Area type="monotone" dataKey="예산" stroke="#10b981" fill="#a7f3d0" fillOpacity={0.3} />
+            <Area type="monotone" dataKey="지출" stroke={activeTheme.primary} fill={activeTheme.soft} fillOpacity={0.6} />
+            <Area type="monotone" dataKey="예산" stroke={ACCENT_GOLD} fill={ACCENT_GOLD} fillOpacity={0.3} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
       {/* 예산 vs 실제 비교 차트 */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-purple-500" />
-            <h3 className="font-bold text-lg">예산 vs 실제 지출</h3>
-          </div>
-          <div className="flex gap-4 text-sm">
-            <span className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-blue-500 rounded"></div>
-              예산
-            </span>
-            <span className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-orange-500 rounded"></div>
-              실제
-            </span>
-          </div>
-        </div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" style={{ color: activeTheme.primary }} />
+                <h3 className="font-bold text-lg">예산 vs 실제 지출</h3>
+              </div>
+              <div className="flex gap-4 text-sm">
+                <span className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: ACCENT_GOLD }}></div>
+                  예산
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: activeTheme.primary }}></div>
+                  실제
+                </span>
+              </div>
+            </div>
         <ResponsiveContainer width="100%" height={350}>
           <BarChart data={budgetComparisonData}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -2600,127 +2580,96 @@ const ReceiptFinancePlatform = () => {
             <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
             <Tooltip formatter={(v) => `₩${v.toLocaleString()}`} />
             <Legend />
-            <Bar dataKey="예산" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="실제" fill="#f97316" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="예산" fill={ACCENT_GOLD} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="실제" fill={activeTheme.primary} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       {/* 절약/초과 요약 */}
       <div className="grid md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+        <div className="rounded-xl p-4 border" style={{ backgroundColor: activeTheme.soft, borderColor: activeTheme.soft }}>
           <div className="flex items-center gap-2 mb-2">
-            <TrendingDown className="w-5 h-5 text-green-600" />
-            <span className="font-semibold text-green-800">절약한 항목</span>
+            <TrendingDown className="w-5 h-5" style={{ color: activeTheme.primary }} />
+            <span className="font-semibold" style={{ color: activeTheme.primary }}>절약한 항목</span>
           </div>
-          <div className="text-2xl font-bold text-green-600">
+          <div className="text-2xl font-bold" style={{ color: activeTheme.primary }}>
             {budgetComparisonData.filter(d => d.차이 > 0).length}개
           </div>
-          <div className="text-sm text-green-700 mt-1">
+          <div className="text-sm mt-1" style={{ color: activeTheme.primary }}>
             총 ₩{budgetComparisonData.filter(d => d.차이 > 0).reduce((sum, d) => sum + d.차이, 0).toLocaleString()} 절약
           </div>
         </div>
-        <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-4 border border-red-200">
+        <div className="rounded-xl p-4 border" style={{ backgroundColor: 'rgba(255, 215, 0, 0.16)', borderColor: 'rgba(255, 215, 0, 0.4)' }}>
           <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-5 h-5 text-red-600" />
-            <span className="font-semibold text-red-800">초과한 항목</span>
+            <TrendingUp className="w-5 h-5" style={{ color: ACCENT_GOLD }} />
+            <span className="font-semibold" style={{ color: ACCENT_GOLD }}>초과한 항목</span>
           </div>
-          <div className="text-2xl font-bold text-red-600">
+          <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>
             {budgetComparisonData.filter(d => d.차이 < 0).length}개
           </div>
-          <div className="text-sm text-red-700 mt-1">
+          <div className="text-sm mt-1" style={{ color: ACCENT_GOLD }}>
             총 ₩{Math.abs(budgetComparisonData.filter(d => d.차이 < 0).reduce((sum, d) => sum + d.차이, 0)).toLocaleString()} 초과
           </div>
         </div>
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+        <div className="rounded-xl p-4 border" style={{ backgroundColor: activeTheme.soft, borderColor: activeTheme.border }}>
           <div className="flex items-center gap-2 mb-2">
-            <Activity className="w-5 h-5 text-blue-600" />
-            <span className="font-semibold text-blue-800">예산 달성률</span>
+            <Activity className="w-5 h-5" style={{ color: SUCCESS_GREEN }} />
+            <span className="font-semibold" style={{ color: BRAND_COLOR }}>예산 달성률</span>
           </div>
-          <div className="text-2xl font-bold text-blue-600">
+          <div className="text-2xl font-bold" style={{ color: SUCCESS_GREEN }}>
             {Math.round((budgetComparisonData.filter(d => d.차이 >= 0).length / Math.max(budgetComparisonData.length, 1)) * 100)}%
           </div>
-          <div className="text-sm text-blue-700 mt-1">
+          <div className="text-sm mt-1" style={{ color: BRAND_COLOR }}>
             {budgetComparisonData.filter(d => d.차이 >= 0).length}/{budgetComparisonData.length} 카테고리 달성
           </div>
         </div>
       </div>
 
-      {/* 카테고리별 예산 설정 */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border">
-        <h3 className="font-bold text-lg mb-4">카테고리별 예산 설정</h3>
-        <div className="space-y-4">
-          {Object.entries(budgets).map(([category, budget]) => {
-            const maxLimit = budgetMaxLimits[category] || 500000;
-            return (
-              <div key={category} className="border-b pb-4 last:border-b-0">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <div className="font-semibold">{category}</div>
-                    <div className="text-sm text-gray-600">
-                      설정 예산: ₩{budget.toLocaleString()}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setEditingBudgetCategory(category);
-                      setTempBudgetLimit(maxLimit.toString());
-                      setShowBudgetLimitModal(true);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition font-medium"
-                    title="상한 설정"
-                  >
-                    상한: {(maxLimit / 10000).toFixed(0)}만원
-                  </button>
-                </div>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min="0"
-                    max={maxLimit}
-                    step="10000"
-                    value={budget}
-                    onChange={(e) => setBudgets({ ...budgets, [category]: parseInt(e.target.value) })}
-                    className="flex-1 accent-blue-500 h-2"
-                  />
-                  <div className="w-24 text-right font-bold text-lg text-blue-600">
-                    ₩{budget.toLocaleString()}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 예산 사용 상세 */}
+      {/* 예산 사용 상세 - 예산 설정 가능 */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <h3 className="font-bold text-lg mb-4">예산 사용 상세</h3>
         <div className="space-y-4">
           {stats.budgetUsage.map((item, idx) => (
             <div key={idx} className="border-b pb-4 last:border-b-0">
               <div className="flex justify-between items-start mb-2">
-                <div>
+                <div className="flex-1">
                   <div className="font-semibold">{item.category}</div>
                   <div className="text-sm text-gray-600">
-                    ₩{item.spent.toLocaleString()} / ₩{item.budget.toLocaleString()}
+                    현재 지출: ₩{item.spent.toLocaleString()}
                   </div>
                 </div>
-                <div className={`text-lg font-bold ${parseFloat(item.percentage) > 90 ? 'text-red-500' :
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">예산:</span>
+                  <input
+                    type="text"
+                    className="w-28 px-2 py-1 text-right border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={(budgets[item.category] || item.budget).toLocaleString()}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value.replace(/,/g, '')) || 0;
+                      setBudgets({ ...budgets, [item.category]: value });
+                    }}
+                    placeholder="예산 입력"
+                  />
+                  <span className="text-sm text-gray-500">원</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 mt-2">
+                <div className="flex-1 bg-gray-200 rounded-full h-3">
+                  <div
+                    className={`h-3 rounded-full transition-all ${parseFloat(item.percentage) > 90 ? 'bg-red-500' :
+                      parseFloat(item.percentage) > 70 ? 'bg-orange-500' :
+                        'bg-green-500'
+                      }`}
+                    style={{ width: `${Math.min(parseFloat(item.percentage), 100)}%` }}
+                  />
+                </div>
+                <div className={`text-lg font-bold min-w-[50px] text-right ${parseFloat(item.percentage) > 90 ? 'text-red-500' :
                   parseFloat(item.percentage) > 70 ? 'text-orange-500' :
                     'text-green-500'
                   }`}>
                   {item.percentage}%
                 </div>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className={`h-3 rounded-full transition-all ${parseFloat(item.percentage) > 90 ? 'bg-red-500' :
-                    parseFloat(item.percentage) > 70 ? 'bg-orange-500' :
-                      'bg-green-500'
-                    }`}
-                  style={{ width: `${Math.min(parseFloat(item.percentage), 100)}%` }}
-                />
               </div>
             </div>
           ))}
@@ -2728,6 +2677,32 @@ const ReceiptFinancePlatform = () => {
       </div>
     </div>
   );
+
+  // TOP 10 공제항목 체크리스트 state (TaxPredictionView에서 사용)
+  const [checkedDeductions, setCheckedDeductions] = useState([]);
+  const deductionItems = [
+    { id: 1, title: '신용카드 소득공제', estimatedSaving: 450000, tips: '현금영수증과 체크카드 함께 사용 시 공제율 UP' },
+    { id: 2, title: '의료비 세액공제', estimatedSaving: 350000, tips: '안경 구입비, 보청기도 공제 대상' },
+    { id: 3, title: '교육비 세액공제', estimatedSaving: 300000, tips: '교복 구입비도 공제 가능' },
+    { id: 4, title: '주택자금 공제', estimatedSaving: 400000, tips: '전세자금 대출 이자도 공제 가능' },
+    { id: 5, title: '연금저축 세액공제', estimatedSaving: 594000, tips: 'IRP 포함 시 연 700만원까지' },
+    { id: 6, title: '기부금 세액공제', estimatedSaving: 150000, tips: '이월공제 가능' },
+    { id: 7, title: '월세 세액공제', estimatedSaving: 960000, tips: '총급여 7천만원 이하 대상' },
+    { id: 8, title: '보험료 세액공제', estimatedSaving: 120000, tips: '보장성 보험료 연 100만원 한도' },
+    { id: 9, title: '개인연금저축 소득공제', estimatedSaving: 720000, tips: '연 1,800만원 한도 40% 공제' },
+    { id: 10, title: '청약저축 소득공제', estimatedSaving: 480000, tips: '무주택 세대주만 해당' },
+  ];
+
+  const handleDeductionCheck = (id) => {
+    setCheckedDeductions(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const deductionCompletionRate = (checkedDeductions.length / deductionItems.length) * 100;
+  const totalDeductionSavings = deductionItems
+    .filter(d => checkedDeductions.includes(d.id))
+    .reduce((sum, d) => sum + d.estimatedSaving, 0);
 
   // Tax Prediction View
   // 연말정산 계산기 슬라이더 state
@@ -2760,7 +2735,7 @@ const ReceiptFinancePlatform = () => {
         {userType === 'individual' && (
           <div className="bg-white rounded-xl p-6 shadow-sm border">
             <div className="flex items-center gap-2 mb-6">
-              <Calculator className="w-6 h-6 text-blue-600" />
+              <Calculator className="w-6 h-6" style={{ color: activeTheme.primary }} />
               <h3 className="font-bold text-xl">연말정산 계산기</h3>
             </div>
 
@@ -2771,7 +2746,7 @@ const ReceiptFinancePlatform = () => {
                 <div>
                   <div className="flex justify-between mb-2">
                     <label className="font-semibold text-gray-700">총급여액</label>
-                    <span className="text-blue-600 font-bold">{calcIncome.toLocaleString()}원</span>
+                    <span className="font-bold" style={{ color: PRIMARY_BLUE }}>{calcIncome.toLocaleString()}원</span>
                   </div>
                   <input
                     type="range"
@@ -2793,8 +2768,8 @@ const ReceiptFinancePlatform = () => {
                   <div className="flex justify-between mb-2">
                     <label className="font-semibold text-gray-700">신용카드 사용액</label>
                     <span className="flex items-center gap-2">
-                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">{creditCardRatio}%</span>
-                      <span className="text-blue-600 font-bold">{calcCreditCard.toLocaleString()}원</span>
+                      <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: `${PRIMARY_BLUE}20`, color: PRIMARY_BLUE }}>{creditCardRatio}%</span>
+                      <span className="font-bold" style={{ color: PRIMARY_BLUE }}>{calcCreditCard.toLocaleString()}원</span>
                     </span>
                   </div>
                   <input
@@ -2812,7 +2787,7 @@ const ReceiptFinancePlatform = () => {
                 <div>
                   <div className="flex justify-between mb-2">
                     <label className="font-semibold text-gray-700">현금영수증</label>
-                    <span className="text-blue-600 font-bold">{calcCashReceipt.toLocaleString()}원</span>
+                    <span className="font-bold" style={{ color: PRIMARY_BLUE }}>{calcCashReceipt.toLocaleString()}원</span>
                   </div>
                   <input
                     type="range"
@@ -2829,7 +2804,7 @@ const ReceiptFinancePlatform = () => {
                 <div>
                   <div className="flex justify-between mb-2">
                     <label className="font-semibold text-gray-700">의료비</label>
-                    <span className="text-blue-600 font-bold">{calcMedical.toLocaleString()}원</span>
+                    <span className="font-bold" style={{ color: PRIMARY_BLUE }}>{calcMedical.toLocaleString()}원</span>
                   </div>
                   <input
                     type="range"
@@ -2846,7 +2821,7 @@ const ReceiptFinancePlatform = () => {
                 <div>
                   <div className="flex justify-between mb-2">
                     <label className="font-semibold text-gray-700">교육비</label>
-                    <span className="text-blue-600 font-bold">{calcEducation.toLocaleString()}원</span>
+                    <span className="font-bold" style={{ color: PRIMARY_BLUE }}>{calcEducation.toLocaleString()}원</span>
                   </div>
                   <input
                     type="range"
@@ -2863,7 +2838,7 @@ const ReceiptFinancePlatform = () => {
               {/* 결과 섹션 */}
               <div className="space-y-4">
                 {/* 예상 환급액 */}
-                <div className="bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl p-6 text-white">
+                <div className="rounded-xl p-6 text-white shadow-flat" style={{ backgroundColor: PRIMARY_BLUE }}>
                   <div className="text-sm opacity-90 mb-2">예상 환급액</div>
                   <div className="text-4xl font-bold mb-2">{calcRefund.toLocaleString()}원</div>
                   <div className="flex items-center gap-1 text-sm opacity-90">
@@ -2891,9 +2866,9 @@ const ReceiptFinancePlatform = () => {
                     <span className="text-gray-600">교육비 공제</span>
                     <span className="font-semibold">{Math.floor(calcEducation * 0.15).toLocaleString()}원</span>
                   </div>
-                  <div className="flex justify-between py-3 bg-blue-50 rounded-lg px-3 mt-2">
-                    <span className="font-bold text-blue-900">총 공제액</span>
-                    <span className="font-bold text-blue-600">
+                  <div className="flex justify-between py-3 rounded-lg px-3 mt-2" style={{ backgroundColor: `${PRIMARY_BLUE}15` }}>
+                    <span className="font-bold" style={{ color: BRAND_COLOR }}>총 공제액</span>
+                    <span className="font-bold" style={{ color: PRIMARY_BLUE }}>
                       {Math.floor(calcCreditCard * 0.15 + calcCashReceipt * 0.3 + calcMedical * 0.15 + calcEducation * 0.15).toLocaleString()}원
                     </span>
                   </div>
@@ -2928,13 +2903,16 @@ const ReceiptFinancePlatform = () => {
             <button
               onClick={() => setUserType('individual')}
               className={`p-6 rounded-xl border-2 transition ${userType === 'individual'
-                ? 'border-blue-500 bg-blue-50'
+                ? ''
                 : 'border-gray-200 hover:border-gray-300'
                 }`}
+              style={userType === 'individual' ? { borderColor: PRIMARY_BLUE, backgroundColor: `${PRIMARY_BLUE}10` } : {}}
             >
               <div className="flex items-center gap-3 mb-3">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${userType === 'individual' ? 'bg-blue-500' : 'bg-gray-200'
-                  }`}>
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: userType === 'individual' ? PRIMARY_BLUE : '#E5E7EB' }}
+                >
                   <User className={`w-6 h-6 ${userType === 'individual' ? 'text-white' : 'text-gray-500'}`} />
                 </div>
                 <div className="text-left">
@@ -2950,13 +2928,16 @@ const ReceiptFinancePlatform = () => {
             <button
               onClick={() => setUserType('business')}
               className={`p-6 rounded-xl border-2 transition ${userType === 'business'
-                ? 'border-purple-500 bg-purple-50'
+                ? ''
                 : 'border-gray-200 hover:border-gray-300'
                 }`}
+              style={userType === 'business' ? { borderColor: BRAND_COLOR, backgroundColor: `${BRAND_COLOR}10` } : {}}
             >
               <div className="flex items-center gap-3 mb-3">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${userType === 'business' ? 'bg-purple-500' : 'bg-gray-200'
-                  }`}>
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: userType === 'business' ? BRAND_COLOR : '#E5E7EB' }}
+                >
                   <Briefcase className={`w-6 h-6 ${userType === 'business' ? 'text-white' : 'text-gray-500'}`} />
                 </div>
                 <div className="text-left">
@@ -2980,12 +2961,12 @@ const ReceiptFinancePlatform = () => {
             <AreaChart data={taxData}>
               <defs>
                 <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  <stop offset="5%" stopColor={activeTheme.primary} stopOpacity={0.8} />
+                  <stop offset="95%" stopColor={activeTheme.primary} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  <stop offset="5%" stopColor={ACCENT_GOLD} stopOpacity={0.8} />
+                  <stop offset="95%" stopColor={ACCENT_GOLD} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" />
@@ -2993,23 +2974,23 @@ const ReceiptFinancePlatform = () => {
               <YAxis />
               <Tooltip formatter={(value) => `₩${value.toLocaleString()}`} />
               <Legend />
-              <Area type="monotone" dataKey="actual" stroke="#3b82f6" fillOpacity={1} fill="url(#colorActual)" name="실제 납부" />
-              <Area type="monotone" dataKey="predicted" stroke="#f59e0b" fillOpacity={1} fill="url(#colorPredicted)" name="예상 납부" />
+              <Area type="monotone" dataKey="actual" stroke={activeTheme.primary} fillOpacity={1} fill="url(#colorActual)" name="실제 납부" />
+              <Area type="monotone" dataKey="predicted" stroke={ACCENT_GOLD} fillOpacity={1} fill="url(#colorPredicted)" name="예상 납부" />
             </AreaChart>
           </ResponsiveContainer>
 
           <div className="grid md:grid-cols-3 gap-4 mt-4">
-            <div className="bg-blue-50 rounded-lg p-4">
+            <div className="rounded-lg p-4" style={{ backgroundColor: activeTheme.soft }}>
               <div className="text-sm text-gray-600 mb-1">실제 납부액 (1~5월)</div>
-              <div className="text-2xl font-bold text-blue-600">₩{totalActualTax.toLocaleString()}</div>
+              <div className="text-2xl font-bold" style={{ color: activeTheme.primary }}>₩{totalActualTax.toLocaleString()}</div>
             </div>
-            <div className="bg-orange-50 rounded-lg p-4">
+            <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(255, 215, 0, 0.16)' }}>
               <div className="text-sm text-gray-600 mb-1">예상 납부액 (6~12월)</div>
-              <div className="text-2xl font-bold text-orange-600">₩{totalPredictedTax.toLocaleString()}</div>
+              <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>₩{totalPredictedTax.toLocaleString()}</div>
             </div>
-            <div className="bg-green-50 rounded-lg p-4">
+            <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(0, 255, 127, 0.12)' }}>
               <div className="text-sm text-gray-600 mb-1">절세 기회</div>
-              <div className="text-2xl font-bold text-green-600">₩{Math.floor(totalPredictedTax * 0.15).toLocaleString()}</div>
+              <div className="text-2xl font-bold" style={{ color: '#00FF7F' }}>₩{Math.floor(totalPredictedTax * 0.15).toLocaleString()}</div>
             </div>
           </div>
         </div>
@@ -3025,8 +3006,8 @@ const ReceiptFinancePlatform = () => {
                 <YAxis />
                 <Tooltip formatter={(value) => `₩${value.toLocaleString()}`} />
                 <Legend />
-                <Bar dataKey="income" fill="#10b981" name="수입" />
-                <Bar dataKey="expense" fill="#ef4444" name="지출" />
+                <Bar dataKey="income" fill={ACCENT_GOLD} name="수입" />
+                <Bar dataKey="expense" fill={activeTheme.primary} name="지출" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -3074,6 +3055,82 @@ const ReceiptFinancePlatform = () => {
             </div>
           </div>
         )}
+
+        {/* TOP 10 공제항목 체크리스트 - 개인만 표시 */}
+        {userType === 'individual' && (
+          <div className="bg-white rounded-xl p-6 shadow-sm border">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+                <h3 className="font-bold text-lg">TOP 10 공제항목 체크</h3>
+              </div>
+              <span className="text-sm text-gray-500">{checkedDeductions.length}/10 확인</span>
+            </div>
+
+            {/* 진행 상태 바 */}
+            <div className="rounded-lg p-4 mb-4 shadow-flat" style={{ backgroundColor: SUCCESS_GREEN, color: BRAND_COLOR }}>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm">진행률</span>
+                <span className="font-bold">{deductionCompletionRate.toFixed(0)}%</span>
+              </div>
+              <div className="w-full bg-white/30 rounded-full h-2">
+                <div
+                  className="h-2 bg-white rounded-full transition-all"
+                  style={{ width: `${deductionCompletionRate}%` }}
+                />
+              </div>
+              <div className="mt-2 text-sm">
+                예상 절세액: <span className="font-bold">{(totalDeductionSavings / 10000).toFixed(0)}만원</span>
+              </div>
+            </div>
+
+            {/* 체크리스트 */}
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {deductionItems.map((item, idx) => (
+                <div
+                  key={item.id}
+                  onClick={() => handleDeductionCheck(item.id)}
+                  className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                    checkedDeductions.includes(item.id)
+                      ? 'bg-green-50 border-2 border-green-300'
+                      : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                    checkedDeductions.includes(item.id)
+                      ? 'bg-green-500 text-white'
+                      : 'bg-gray-300'
+                  }`}>
+                    {checkedDeductions.includes(item.id) ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      <span className="text-xs font-bold text-white">{idx + 1}</span>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm">{item.title}</div>
+                    <div className="text-xs text-gray-500">{item.tips}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-green-600">
+                      {(item.estimatedSaving / 10000).toFixed(0)}만원
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {deductionCompletionRate === 100 && (
+              <div className="mt-4 p-4 bg-green-100 rounded-lg text-center">
+                <PartyPopper className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                <div className="font-bold text-green-800">모든 항목 확인 완료!</div>
+                <div className="text-sm text-green-700">
+                  총 예상 절세액: {(totalDeductionSavings / 10000).toFixed(0)}만원
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -3114,32 +3171,6 @@ const ReceiptFinancePlatform = () => {
 
   const unlockedBadges = allBadges.filter(b => b.unlocked);
   const lockedBadges = allBadges.filter(b => !b.unlocked);
-
-  // TOP 10 공제항목 체크리스트 state
-  const [checkedDeductions, setCheckedDeductions] = useState([]);
-  const deductionItems = [
-    { id: 1, title: '신용카드 소득공제', estimatedSaving: 450000, tips: '현금영수증과 체크카드 함께 사용 시 공제율 UP' },
-    { id: 2, title: '의료비 세액공제', estimatedSaving: 350000, tips: '안경 구입비, 보청기도 공제 대상' },
-    { id: 3, title: '교육비 세액공제', estimatedSaving: 300000, tips: '교복 구입비도 공제 가능' },
-    { id: 4, title: '주택자금 공제', estimatedSaving: 400000, tips: '전세자금 대출 이자도 공제 가능' },
-    { id: 5, title: '연금저축 세액공제', estimatedSaving: 594000, tips: 'IRP 포함 시 연 700만원까지' },
-    { id: 6, title: '기부금 세액공제', estimatedSaving: 150000, tips: '이월공제 가능' },
-    { id: 7, title: '월세 세액공제', estimatedSaving: 960000, tips: '총급여 7천만원 이하 대상' },
-    { id: 8, title: '보험료 세액공제', estimatedSaving: 120000, tips: '보장성 보험료 연 100만원 한도' },
-    { id: 9, title: '개인연금저축 소득공제', estimatedSaving: 720000, tips: '연 1,800만원 한도 40% 공제' },
-    { id: 10, title: '청약저축 소득공제', estimatedSaving: 480000, tips: '무주택 세대주만 해당' },
-  ];
-
-  const handleDeductionCheck = (id) => {
-    setCheckedDeductions(prev =>
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
-  };
-
-  const deductionCompletionRate = (checkedDeductions.length / deductionItems.length) * 100;
-  const totalDeductionSavings = deductionItems
-    .filter(d => checkedDeductions.includes(d.id))
-    .reduce((sum, d) => sum + d.estimatedSaving, 0);
 
   // Benefits (혜택 탐색) 데이터
   const [benefitsCategory, setBenefitsCategory] = useState('all');
@@ -3281,7 +3312,7 @@ const ReceiptFinancePlatform = () => {
       </div>
 
       {/* 요약 카드 */}
-      <div className="bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl p-6 text-white">
+      <div className="rounded-xl p-6 text-white shadow-flat" style={{ backgroundColor: NEON_ICE, color: BRAND_COLOR }}>
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <div className="text-3xl font-bold">{benefitsData.length}개</div>
@@ -3311,15 +3342,16 @@ const ReceiptFinancePlatform = () => {
               onClick={() => setBenefitsCategory(cat.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition ${
                 benefitsCategory === cat.id
-                  ? 'bg-blue-500 text-white'
+                  ? ''
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
+              style={benefitsCategory === cat.id ? { backgroundColor: activeTheme.primary, color: activeTheme.text } : {}}
             >
               <Icon className="w-4 h-4" />
               <span>{cat.label}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                benefitsCategory === cat.id ? 'bg-blue-400' : 'bg-gray-200'
-              }`}>{count}</span>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full ${benefitsCategory === cat.id ? 'bg-white/30' : 'bg-gray-200'}`}
+              >{count}</span>
             </button>
           );
         })}
@@ -3350,7 +3382,7 @@ const ReceiptFinancePlatform = () => {
               )}
             </div>
 
-            <div className="text-2xl font-bold text-blue-600 mb-2">{benefit.amount}</div>
+            <div className="text-2xl font-bold mb-2" style={{ color: activeTheme.primary }}>{benefit.amount}</div>
             <p className="text-sm text-gray-600 mb-3">{benefit.description}</p>
 
             <div className="text-xs text-gray-500 mb-4">
@@ -3360,9 +3392,10 @@ const ReceiptFinancePlatform = () => {
             <button
               className={`w-full py-2 rounded-lg font-semibold transition ${
                 benefit.eligible
-                  ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600'
+                  ? 'hover:opacity-90'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
+              style={benefit.eligible ? { backgroundColor: activeTheme.primary, color: activeTheme.text } : {}}
             >
               {benefit.eligible ? '신청하기' : '자격 확인'}
             </button>
@@ -3377,7 +3410,10 @@ const ReceiptFinancePlatform = () => {
           복잡한 세금 혜택 신청을 전문가가 도와드립니다.
         </p>
         <div className="flex gap-3">
-          <button className="flex-1 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition">
+          <button
+            className="flex-1 py-2 rounded-lg font-semibold hover:opacity-90 transition"
+            style={{ backgroundColor: activeTheme.primary, color: activeTheme.text }}
+          >
             전문가 상담
           </button>
           <button className="flex-1 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition">
@@ -3393,22 +3429,22 @@ const ReceiptFinancePlatform = () => {
     <div className="space-y-6">
       {/* User Stats Summary */}
       <div className="grid md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-yellow-400 to-orange-400 rounded-xl p-6 text-white">
+        <div className="rounded-xl p-6 shadow-flat" style={{ backgroundColor: ACCENT_GOLD, color: BRAND_COLOR }}>
           <Trophy className="w-8 h-8 mb-3" />
           <div className="text-3xl font-bold mb-1">{userProfile.level}</div>
-          <div className="text-sm opacity-90">레벨</div>
+          <div className="text-sm opacity-80">레벨</div>
         </div>
-        <div className="bg-gradient-to-br from-blue-400 to-purple-400 rounded-xl p-6 text-white">
+        <div className="rounded-xl p-6 text-white shadow-flat" style={{ backgroundColor: PRIMARY_BLUE }}>
           <Star className="w-8 h-8 mb-3" />
           <div className="text-3xl font-bold mb-1">{userProfile.points.toLocaleString()}</div>
           <div className="text-sm opacity-90">포인트</div>
         </div>
-        <div className="bg-gradient-to-br from-green-400 to-emerald-400 rounded-xl p-6 text-white">
+        <div className="rounded-xl p-6 shadow-flat" style={{ backgroundColor: SUCCESS_GREEN, color: BRAND_COLOR }}>
           <Award className="w-8 h-8 mb-3" />
           <div className="text-3xl font-bold mb-1">{unlockedBadges.length}</div>
-          <div className="text-sm opacity-90">획득 배지</div>
+          <div className="text-sm opacity-80">획득 배지</div>
         </div>
-        <div className="bg-gradient-to-br from-pink-400 to-red-400 rounded-xl p-6 text-white">
+        <div className="rounded-xl p-6 text-white shadow-flat" style={{ backgroundColor: BRAND_COLOR }}>
           <Flame className="w-8 h-8 mb-3" />
           <div className="text-3xl font-bold mb-1">{userProfile.streak}</div>
           <div className="text-sm opacity-90">연속 출석</div>
@@ -3450,20 +3486,20 @@ const ReceiptFinancePlatform = () => {
 
           {/* 통계 카드 */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">{challengeStats.active}</div>
+            <div className="rounded-lg p-4 text-center" style={{ backgroundColor: `${PRIMARY_BLUE}15` }}>
+              <div className="text-2xl font-bold" style={{ color: PRIMARY_BLUE }}>{challengeStats.active}</div>
               <div className="text-sm text-gray-600">진행 중</div>
             </div>
-            <div className="bg-green-50 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-green-600">{challengeStats.completed}</div>
+            <div className="rounded-lg p-4 text-center" style={{ backgroundColor: `${SUCCESS_GREEN}20` }}>
+              <div className="text-2xl font-bold" style={{ color: SUCCESS_GREEN }}>{challengeStats.completed}</div>
               <div className="text-sm text-gray-600">완료</div>
             </div>
-            <div className="bg-purple-50 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-purple-600">{challengeStats.avgProgress}%</div>
+            <div className="rounded-lg p-4 text-center" style={{ backgroundColor: `${BRAND_COLOR}15` }}>
+              <div className="text-2xl font-bold" style={{ color: BRAND_COLOR }}>{challengeStats.avgProgress}%</div>
               <div className="text-sm text-gray-600">평균 진행률</div>
             </div>
-            <div className="bg-yellow-50 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-yellow-600">{challengeStats.totalRewardsEarned.toLocaleString()}P</div>
+            <div className="rounded-lg p-4 text-center" style={{ backgroundColor: `${ACCENT_GOLD}25` }}>
+              <div className="text-2xl font-bold" style={{ color: ACCENT_GOLD }}>{challengeStats.totalRewardsEarned.toLocaleString()}P</div>
               <div className="text-sm text-gray-600">총 획득 포인트</div>
             </div>
           </div>
@@ -3489,7 +3525,7 @@ const ReceiptFinancePlatform = () => {
             <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               {unlockedBadges.map(badge => (
                 <div key={badge.id} className="group relative">
-                  <div className="bg-gradient-to-br from-yellow-100 to-orange-100 rounded-xl p-4 text-center border-2 border-yellow-300 hover:scale-105 transition cursor-pointer">
+                  <div className="bg-yellow-50 rounded-xl p-4 text-center border-2 border-yellow-300 hover:scale-105 transition cursor-pointer">
                     <div className="text-3xl mb-2">{badge.icon}</div>
                     <div className="text-xs font-semibold truncate">{badge.name}</div>
                   </div>
@@ -3538,8 +3574,9 @@ const ReceiptFinancePlatform = () => {
           {leaderboard.map((user, idx) => (
             <div
               key={idx}
-              className={`flex items-center justify-between p-4 rounded-lg ${user.isUser ? 'bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-300' : 'bg-gray-50'
+              className={`flex items-center justify-between p-4 rounded-lg ${user.isUser ? 'border-2' : 'bg-gray-50'
                 }`}
+              style={user.isUser ? { backgroundColor: `${PRIMARY_BLUE}10`, borderColor: `${PRIMARY_BLUE}50` } : {}}
             >
               <div className="flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${user.rank === 1 ? 'bg-yellow-400 text-yellow-900' :
@@ -3558,7 +3595,7 @@ const ReceiptFinancePlatform = () => {
                 </div>
               </div>
               {user.isUser && (
-                <span className="text-xs bg-blue-500 text-white px-3 py-1 rounded-full font-bold">
+                <span className="text-xs text-white px-3 py-1 rounded-full font-bold" style={{ backgroundColor: PRIMARY_BLUE }}>
                   나
                 </span>
               )}
@@ -3570,7 +3607,7 @@ const ReceiptFinancePlatform = () => {
       {/* Weekly Missions */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <div className="flex items-center gap-2 mb-4">
-          <Repeat className="w-5 h-5 text-purple-500" />
+          <Repeat className="w-5 h-5" style={{ color: BRAND_COLOR }} />
           <h3 className="font-bold text-lg">주간 미션</h3>
         </div>
         <div className="space-y-4">
@@ -3583,13 +3620,13 @@ const ReceiptFinancePlatform = () => {
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-gray-500 mb-1">보상</div>
-                  <div className="text-lg font-bold text-purple-600">+{mission.reward}P</div>
+                  <div className="text-lg font-bold" style={{ color: BRAND_COLOR }}>+{mission.reward}P</div>
                 </div>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all"
-                  style={{ width: `${(mission.progress / mission.target) * 100}%` }}
+                  className="h-3 rounded-full transition-all"
+                  style={{ width: `${(mission.progress / mission.target) * 100}%`, backgroundColor: BRAND_COLOR }}
                 />
               </div>
             </div>
@@ -3605,7 +3642,7 @@ const ReceiptFinancePlatform = () => {
             <div key={challenge.id} className="bg-white rounded-xl p-6 shadow-sm border">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-purple-100 rounded-xl flex items-center justify-center text-2xl">
+                  <div className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl border" style={{ backgroundColor: `${PRIMARY_BLUE}10`, borderColor: `${PRIMARY_BLUE}30` }}>
                     {challenge.badge}
                   </div>
                   <div>
@@ -3631,15 +3668,15 @@ const ReceiptFinancePlatform = () => {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
                   <div
-                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-3 rounded-full transition-all"
-                    style={{ width: `${(challenge.progress / challenge.target) * 100}%` }}
+                    className="h-3 rounded-full transition-all"
+                    style={{ width: `${(challenge.progress / challenge.target) * 100}%`, backgroundColor: PRIMARY_BLUE }}
                   />
                 </div>
                 <div className="text-xs text-gray-500 mt-1">{challenge.progress} / {challenge.target}</div>
               </div>
               <div className="flex items-center justify-between pt-3 border-t">
                 <span className="text-sm text-gray-600">완료 시 보상</span>
-                <span className="font-bold text-blue-600">+{challenge.reward}P</span>
+                <span className="font-bold" style={{ color: PRIMARY_BLUE }}>+{challenge.reward}P</span>
               </div>
             </div>
           ))}
@@ -3671,7 +3708,7 @@ const ReceiptFinancePlatform = () => {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-lg">리워드 샵</h3>
-          <div className="text-sm font-semibold text-blue-600">
+          <div className="text-sm font-semibold" style={{ color: PRIMARY_BLUE }}>
             보유: {userProfile.points.toLocaleString()}P
           </div>
         </div>
@@ -3679,21 +3716,22 @@ const ReceiptFinancePlatform = () => {
           {rewards.map(reward => (
             <div key={reward.id} className="bg-white rounded-xl p-6 shadow-sm border hover:shadow-lg transition">
               <div className="text-center mb-4">
-                <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-xl flex items-center justify-center text-4xl mx-auto mb-3">
+                <div className="w-20 h-20 rounded-xl flex items-center justify-center text-4xl mx-auto mb-3 border" style={{ backgroundColor: `${PRIMARY_BLUE}10`, borderColor: `${PRIMARY_BLUE}30` }}>
                   {reward.icon}
                 </div>
                 <h4 className="font-bold mb-1">{reward.name}</h4>
                 <p className="text-xs text-gray-600">{reward.description}</p>
               </div>
               <div className="flex items-center justify-between pt-4 border-t">
-                <div className="font-bold text-lg text-blue-600">{reward.points}P</div>
+                <div className="font-bold text-lg" style={{ color: PRIMARY_BLUE }}>{reward.points}P</div>
                 <button
                   onClick={() => handleRewardExchange(reward)}
                   disabled={userProfile.points < reward.points}
                   className={`px-4 py-2 rounded-lg font-semibold transition ${userProfile.points >= reward.points
-                    ? 'bg-blue-500 text-white hover:bg-blue-600'
+                    ? 'hover:opacity-90'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     }`}
+                  style={userProfile.points >= reward.points ? { backgroundColor: activeTheme.primary, color: activeTheme.text } : {}}
                 >
                   {userProfile.points >= reward.points ? '교환하기' : (
                     <Lock className="w-4 h-4" />
@@ -3711,7 +3749,7 @@ const ReceiptFinancePlatform = () => {
       </div>
 
       {/* Referral Event */}
-      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-6">
+      <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center flex-shrink-0">
             <Gift className="w-7 h-7 text-white" />
@@ -3733,11 +3771,20 @@ const ReceiptFinancePlatform = () => {
   // 로그인되지 않은 경우 로그인 화면 표시
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+      <div
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ ...themeStyle, backgroundColor: BRAND_COLOR }}
+      >
+        <div
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8"
+          style={{ border: `1px solid ${activeTheme.soft}` }}
+        >
           {/* 로고 */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ backgroundColor: PRIMARY_BLUE }}
+            >
               <Wallet className="w-10 h-10 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-gray-800">머니플랫 AI</h1>
@@ -3748,15 +3795,17 @@ const ReceiptFinancePlatform = () => {
           <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setAuthMode('login')}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${authMode === 'login' ? 'bg-white shadow text-blue-600' : 'text-gray-600'
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${authMode === 'login' ? 'bg-white shadow' : 'text-gray-600'
                 }`}
+              style={authMode === 'login' ? { color: activeTheme.primary } : {}}
             >
               로그인
             </button>
             <button
               onClick={() => setAuthMode('signup')}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${authMode === 'signup' ? 'bg-white shadow text-blue-600' : 'text-gray-600'
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${authMode === 'signup' ? 'bg-white shadow' : 'text-gray-600'
                 }`}
+              style={authMode === 'signup' ? { color: activeTheme.primary } : {}}
             >
               회원가입
             </button>
@@ -3818,7 +3867,8 @@ const ReceiptFinancePlatform = () => {
             <button
               onClick={authMode === 'login' ? handleEmailLogin : handleEmailSignup}
               disabled={isLoading}
-              className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-purple-600 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-3 text-white font-semibold rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-flat-md hover:opacity-90"
+              style={{ backgroundColor: PRIMARY_BLUE }}
             >
               {isLoading ? (
                 <>
@@ -3843,29 +3893,6 @@ const ReceiptFinancePlatform = () => {
               </div>
             </div>
 
-            {/* 카카오 로그인 */}
-            <button
-              onClick={handleKakaoLogin}
-              className="w-full py-3 bg-[#FEE500] text-[#191919] font-semibold rounded-lg hover:bg-[#FDD835] transition flex items-center justify-center gap-2"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3C6.477 3 2 6.463 2 10.714c0 2.804 1.862 5.263 4.643 6.634-.146.53-.925 3.403-.96 3.622 0 0-.02.166.088.229.108.063.235.014.235.014.31-.044 3.593-2.351 4.155-2.758.597.088 1.213.134 1.839.134 5.523 0 10-3.463 10-7.875S17.523 3 12 3z" />
-              </svg>
-              카카오로 시작하기
-            </button>
-          </div>
-
-          {/* 테스트 계정 안내 */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-800 font-medium mb-2">테스트 방법</p>
-            <ol className="text-xs text-blue-700 space-y-1">
-              <li>1. 위에서 회원가입 후 이메일 인증</li>
-              <li>2. Supabase에서 시드 데이터 실행:</li>
-              <li className="ml-3 font-mono bg-blue-100 px-2 py-1 rounded">
-                SELECT seed_user_data('사용자-UUID');
-              </li>
-              <li>3. 로그인하면 더미 데이터가 표시됩니다</li>
-            </ol>
           </div>
         </div>
       </div>
@@ -3873,12 +3900,15 @@ const ReceiptFinancePlatform = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" style={themeStyle}>
       {/* Loading Overlay */}
       {isLoading && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <div
+              className="w-12 h-12 border-4 border-t-transparent rounded-full animate-spin"
+              style={{ borderColor: activeTheme.primary, borderTopColor: 'transparent' }}
+            ></div>
             <p className="text-gray-700 font-medium">처리 중...</p>
           </div>
         </div>
@@ -3895,31 +3925,23 @@ const ReceiptFinancePlatform = () => {
         </div>
       )}
 
-      {/* Header with Notification Center */}
-      <header className="bg-white shadow-sm border-b sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+      {/* Header with Notification Center - 스크롤 시 축소 효과 */}
+      <header className={`bg-white shadow-sm border-b sticky top-0 z-40 transition-all duration-300 ${isScrolled ? 'py-0' : ''}`}>
+        <div className={`max-w-7xl mx-auto px-4 transition-all duration-300 ${isScrolled ? 'py-2' : 'py-4'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                <Wallet className="w-6 h-6 text-white" />
+              <div
+                className={`rounded-lg flex items-center justify-center shadow-flat transition-all duration-300 ${isScrolled ? 'w-8 h-8' : 'w-10 h-10'}`}
+                style={{ backgroundColor: activeTheme.primary }}
+              >
+                <Wallet className={`text-white transition-all duration-300 ${isScrolled ? 'w-5 h-5' : 'w-6 h-6'}`} />
               </div>
               <div>
-                <h1 className="text-xl font-bold">머니플랫 AI</h1>
-                <p className="text-xs text-gray-500">세무사급 AI 재무 플랫폼</p>
+                <h1 className={`font-bold transition-all duration-300 ${isScrolled ? 'text-lg' : 'text-xl'}`}>머니플랫 AI</h1>
+                <p className={`text-gray-500 transition-all duration-300 ${isScrolled ? 'text-xs hidden' : 'text-xs'}`}>세무사급 AI 재무 플랫폼</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {/* 사용자 정보 */}
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-white" />
-                </div>
-                <div className="text-sm">
-                  <p className="font-medium text-gray-800">{userProfile.name}</p>
-                  <p className="text-xs text-gray-500">Lv.{userProfile.level}</p>
-                </div>
-              </div>
-
               {/* 알림 버튼 */}
               <button className="relative p-2 hover:bg-gray-100 rounded-lg transition">
                 <Bell className="w-5 h-5" />
@@ -3931,7 +3953,10 @@ const ReceiptFinancePlatform = () => {
               </button>
 
               {/* OCR 스캔 버튼 */}
-              <label className="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg cursor-pointer hover:bg-blue-100 transition flex items-center gap-2">
+              <label
+                className="px-4 py-2 rounded-lg cursor-pointer transition flex items-center gap-2 font-semibold"
+                style={{ backgroundColor: activeTheme.soft, color: activeTheme.primary }}
+              >
                 <Camera className="w-4 h-4" />
                 <span className="text-sm font-semibold">OCR 스캔</span>
                 <input
@@ -3945,7 +3970,8 @@ const ReceiptFinancePlatform = () => {
               {/* 연말정산 시뮬레이터 버튼 */}
               <button
                 onClick={() => setShowTaxSimulatorModal(true)}
-                className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-orange-600 transition flex items-center gap-2"
+                className="text-white px-4 py-2 rounded-lg transition flex items-center gap-2 shadow-flat hover:opacity-90"
+                style={{ backgroundColor: ACCENT_GOLD, color: BRAND_COLOR }}
                 title="연말정산 시뮬레이터"
               >
                 <Calculator className="w-4 h-4" />
@@ -3981,10 +4007,11 @@ const ReceiptFinancePlatform = () => {
               <button
                 key={tab.id}
                 onClick={() => setCurrentTab(tab.id)}
-                className={`px-6 py-3 flex items-center gap-2 whitespace-nowrap transition relative ${currentTab === tab.id
-                  ? 'border-b-2 border-blue-500 text-blue-600 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900'
+                className={`px-6 py-3 flex items-center gap-2 whitespace-nowrap transition relative border-b-2 ${currentTab === tab.id
+                  ? 'font-semibold'
+                  : 'text-gray-600 hover:text-gray-900 border-transparent'
                   }`}
+                style={currentTab === tab.id ? { color: activeTheme.primary, borderColor: activeTheme.primary, backgroundColor: activeTheme.soft } : {}}
               >
                 <tab.icon className="w-5 h-5" />
                 {tab.label}
@@ -4063,7 +4090,8 @@ const ReceiptFinancePlatform = () => {
 
               <button
                 onClick={handleAddReceipt}
-                className="w-full bg-blue-500 text-white py-3 rounded-lg font-semibold hover:bg-blue-600 transition"
+                className="w-full text-white py-3 rounded-lg font-semibold hover:opacity-90 transition"
+                style={{ backgroundColor: PRIMARY_BLUE }}
               >
                 추가하기 (+10P)
               </button>
@@ -4085,7 +4113,7 @@ const ReceiptFinancePlatform = () => {
 
             <div className="space-y-4">
               <div className="text-center">
-                <span className="px-4 py-2 bg-blue-100 text-blue-700 rounded-full font-semibold">
+                <span className="px-4 py-2 rounded-full font-semibold" style={{ backgroundColor: `${PRIMARY_BLUE}20`, color: PRIMARY_BLUE }}>
                   {editingBudgetCategory}
                 </span>
               </div>
@@ -4144,7 +4172,8 @@ const ReceiptFinancePlatform = () => {
                   setShowBudgetLimitModal(false);
                   setEditingBudgetCategory(null);
                 }}
-                className="w-full py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition font-semibold"
+                className="w-full py-3 text-white rounded-lg hover:opacity-90 transition font-semibold"
+                style={{ backgroundColor: PRIMARY_BLUE }}
               >
                 반영하기
               </button>
@@ -4167,11 +4196,14 @@ const ReceiptFinancePlatform = () => {
             <div className="space-y-4">
               {/* 거래처 */}
               <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                <div className={`w-14 h-14 rounded-lg flex items-center justify-center ${selectedTransaction.source === 'manual' ? 'bg-purple-100' : 'bg-green-100'}`}>
+                <div
+                  className="w-14 h-14 rounded-lg flex items-center justify-center"
+                  style={{ backgroundColor: selectedTransaction.source === 'manual' ? `${BRAND_COLOR}20` : `${SUCCESS_GREEN}30` }}
+                >
                   {selectedTransaction.source === 'manual' ? (
-                    <Camera className="w-7 h-7 text-purple-500" />
+                    <Camera className="w-7 h-7" style={{ color: BRAND_COLOR }} />
                   ) : (
-                    <RefreshCw className="w-7 h-7 text-green-500" />
+                    <RefreshCw className="w-7 h-7" style={{ color: SUCCESS_GREEN }} />
                   )}
                 </div>
                 <div>
@@ -4195,7 +4227,7 @@ const ReceiptFinancePlatform = () => {
                 </div>
                 <div className="flex justify-between items-center py-3 border-b">
                   <span className="text-gray-600">카테고리</span>
-                  <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">{selectedTransaction.category}</span>
+                  <span className="px-3 py-1 rounded-full text-sm" style={{ backgroundColor: `${PRIMARY_BLUE}20`, color: PRIMARY_BLUE }}>{selectedTransaction.category}</span>
                 </div>
                 <div className="flex justify-between items-center py-3 border-b">
                   <span className="text-gray-600">거래일</span>
@@ -4250,12 +4282,12 @@ const ReceiptFinancePlatform = () => {
               </button>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="rounded-lg p-4 mb-6 border" style={{ backgroundColor: `${PRIMARY_BLUE}10`, borderColor: `${PRIMARY_BLUE}30` }}>
               <div className="flex items-start gap-3">
-                <Shield className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-blue-900">
+                <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: PRIMARY_BLUE }} />
+                <div className="text-sm" style={{ color: BRAND_COLOR }}>
                   <div className="font-semibold mb-1">안전한 연동 보장</div>
-                  <div className="text-blue-800">
+                  <div style={{ color: `${BRAND_COLOR}CC` }}>
                     금융결제원 오픈뱅킹 API를 통한 안전한 연동 · 비밀번호는 저장되지 않습니다
                   </div>
                 </div>
@@ -4267,7 +4299,10 @@ const ReceiptFinancePlatform = () => {
                 <button
                   key={bank.id}
                   onClick={() => handleLinkAccount(bank)}
-                  className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition text-left"
+                  className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:opacity-90 transition text-left"
+                  style={{ '--hover-border': PRIMARY_BLUE }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = PRIMARY_BLUE; e.currentTarget.style.backgroundColor = `${PRIMARY_BLUE}10`; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
                   <div className="text-3xl">{bank.icon}</div>
                   <div className="flex-1">
@@ -4398,7 +4433,8 @@ const ReceiptFinancePlatform = () => {
                 setShowValueModal(false);
                 setShowAccountLinkModal(true);
               }}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-600 hover:to-purple-600 transition"
+              className="w-full text-white py-4 rounded-xl font-bold text-lg hover:opacity-90 transition"
+              style={{ backgroundColor: PRIMARY_BLUE }}
             >
               지금 바로 계좌 연동하기
             </button>
@@ -4424,10 +4460,14 @@ const ReceiptFinancePlatform = () => {
                 <button
                   onClick={() => handleUserTypeChange('individual')}
                   className={"p-4 rounded-xl border-2 transition " + (userType === 'individual'
-                    ? 'border-blue-500 bg-blue-50'
+                    ? ''
                     : 'border-gray-200 hover:border-gray-300')}
+                  style={userType === 'individual' ? { borderColor: PRIMARY_BLUE, backgroundColor: `${PRIMARY_BLUE}10` } : {}}
                 >
-                  <div className={"w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 " + (userType === 'individual' ? 'bg-blue-500' : 'bg-gray-200')}>
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2"
+                    style={{ backgroundColor: userType === 'individual' ? PRIMARY_BLUE : '#E5E7EB' }}
+                  >
                     <User className={"w-6 h-6 " + (userType === 'individual' ? 'text-white' : 'text-gray-500')} />
                   </div>
                   <div className="font-semibold text-center">개인</div>
@@ -4436,10 +4476,14 @@ const ReceiptFinancePlatform = () => {
                 <button
                   onClick={() => handleUserTypeChange('business')}
                   className={"p-4 rounded-xl border-2 transition " + (userType === 'business'
-                    ? 'border-purple-500 bg-purple-50'
+                    ? ''
                     : 'border-gray-200 hover:border-gray-300')}
+                  style={userType === 'business' ? { borderColor: BRAND_COLOR, backgroundColor: `${BRAND_COLOR}10` } : {}}
                 >
-                  <div className={"w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 " + (userType === 'business' ? 'bg-purple-500' : 'bg-gray-200')}>
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2"
+                    style={{ backgroundColor: userType === 'business' ? BRAND_COLOR : '#E5E7EB' }}
+                  >
                     <Briefcase className={"w-6 h-6 " + (userType === 'business' ? 'text-white' : 'text-gray-500')} />
                   </div>
                   <div className="font-semibold text-center">소상공인</div>
@@ -4456,7 +4500,7 @@ const ReceiptFinancePlatform = () => {
 
               {userType === 'individual' ? (
                 /* 개인용 입력 폼 */
-                <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
+                <div className="space-y-4 p-4 rounded-lg" style={{ backgroundColor: `${PRIMARY_BLUE}10` }}>
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">연봉 (세전)</label>
                     <div className="relative">
@@ -4499,6 +4543,18 @@ const ReceiptFinancePlatform = () => {
                         <option value="yes">있음</option>
                       </select>
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">자녀 수 (선택)</label>
+                    <input
+                      type="number"
+                      value={taxBasicInfo.childDependents}
+                      onChange={(e) => setTaxBasicInfo({...taxBasicInfo, childDependents: Math.max(0, parseInt(e.target.value) || 0)})}
+                      className="w-full px-3 py-2 border rounded-lg text-right"
+                      placeholder="0"
+                      min="0"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">미입력 시 부양가족 수로 계산합니다.</p>
                   </div>
                 </div>
               ) : (
@@ -4586,8 +4642,8 @@ const ReceiptFinancePlatform = () => {
               </button>
               <button
                 onClick={handleSaveSettings}
-                className={"flex-1 py-3 px-4 rounded-lg text-white font-semibold transition " +
-                  (userType === 'individual' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-purple-500 hover:bg-purple-600')}
+                className="flex-1 py-3 px-4 rounded-lg text-white font-semibold transition hover:opacity-90"
+                style={{ backgroundColor: userType === 'individual' ? PRIMARY_BLUE : BRAND_COLOR }}
               >
                 저장하기
               </button>
@@ -4641,8 +4697,8 @@ const ReceiptFinancePlatform = () => {
                 </ul>
               </div>
 
-              <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl p-6 text-white relative border-4 border-yellow-400">
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-purple-900 px-4 py-1 rounded-full text-xs font-bold">
+              <div className="rounded-xl p-6 text-white relative border-4 border-yellow-400" style={{ backgroundColor: BRAND_COLOR }}>
+                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 px-4 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: ACCENT_GOLD, color: BRAND_COLOR }}>
                   추천
                 </div>
                 <div className="text-center mb-4">
@@ -4708,7 +4764,8 @@ const ReceiptFinancePlatform = () => {
                 setIsPremium(true);
                 setShowPremiumModal(false);
               }}
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-4 rounded-xl font-bold text-lg hover:from-purple-600 hover:to-pink-600 transition"
+              className="w-full text-white py-4 rounded-xl font-bold text-lg hover:opacity-90 transition"
+              style={{ backgroundColor: BRAND_COLOR }}
             >
               프리미엄 시작하기 (첫 달 무료)
             </button>
@@ -4736,7 +4793,7 @@ const ReceiptFinancePlatform = () => {
                 {taxExperts.map(expert => (
                   <div key={expert.id} className="bg-gray-50 rounded-xl p-6">
                     <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-3xl">
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl text-white" style={{ backgroundColor: PRIMARY_BLUE }}>
                         {expert.image}
                       </div>
                       <div className="flex-1">
@@ -4757,8 +4814,8 @@ const ReceiptFinancePlatform = () => {
                           ))}
                         </div>
                         <div className="flex items-center justify-between">
-                          <div className="font-bold text-blue-600">₩{expert.price.toLocaleString()}</div>
-                          <button className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition">
+                          <div className="font-bold" style={{ color: PRIMARY_BLUE }}>₩{expert.price.toLocaleString()}</div>
+                          <button className="text-white px-4 py-2 rounded-lg hover:opacity-90 transition" style={{ backgroundColor: PRIMARY_BLUE }}>
                             상담 신청
                           </button>
                         </div>
@@ -4774,24 +4831,24 @@ const ReceiptFinancePlatform = () => {
                 {financialProducts.map(product => (
                   <div key={product.id} className="bg-gray-50 rounded-xl p-6">
                     <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-xl flex items-center justify-center text-3xl">
+                      <div className="w-16 h-16 rounded-xl flex items-center justify-center text-3xl border" style={{ backgroundColor: `${PRIMARY_BLUE}10`, borderColor: `${PRIMARY_BLUE}30` }}>
                         {product.icon}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <h3 className="font-bold text-lg">{product.name}</h3>
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold">
+                          <span className="text-xs px-2 py-1 rounded-full font-semibold" style={{ backgroundColor: `${PRIMARY_BLUE}20`, color: PRIMARY_BLUE }}>
                             매칭도 {product.matchScore}%
                           </span>
                         </div>
                         <div className="text-sm text-gray-600 mb-2">{product.provider}</div>
-                        <div className="text-sm font-semibold text-blue-600 mb-3">{product.benefit}</div>
+                        <div className="text-sm font-semibold mb-3" style={{ color: PRIMARY_BLUE }}>{product.benefit}</div>
                         {product.expectedSavings > 0 && (
                           <div className="text-sm text-green-600 font-bold mb-3">
                             연 ₩{product.expectedSavings.toLocaleString()} 절감
                           </div>
                         )}
-                        <button className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-2 rounded-lg hover:from-blue-600 hover:to-purple-600 transition">
+                        <button className="text-white px-6 py-2 rounded-lg hover:opacity-90 transition" style={{ backgroundColor: PRIMARY_BLUE }}>
                           자세히 보기
                         </button>
                       </div>
@@ -4805,7 +4862,8 @@ const ReceiptFinancePlatform = () => {
               <div className="space-y-4">
                 <button
                   onClick={() => setShowQuestionModal(true)}
-                  className="w-full bg-blue-500 text-white px-4 py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-600 transition"
+                  className="w-full text-white px-4 py-3 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition"
+                  style={{ backgroundColor: PRIMARY_BLUE }}
                 >
                   <Plus className="w-4 h-4" />
                   질문하기
@@ -4813,8 +4871,8 @@ const ReceiptFinancePlatform = () => {
                 {communityPosts.map(post => (
                   <div key={post.id} className="bg-gray-50 rounded-xl p-6">
                     <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
-                        <Users className="w-6 h-6 text-purple-500" />
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center border" style={{ backgroundColor: `${BRAND_COLOR}10`, borderColor: `${BRAND_COLOR}30` }}>
+                        <Users className="w-6 h-6" style={{ color: BRAND_COLOR }} />
                       </div>
                       <div className="flex-1">
                         <div className="text-sm text-gray-600 mb-1">{post.author}</div>
@@ -4882,7 +4940,8 @@ const ReceiptFinancePlatform = () => {
 
               <button
                 onClick={() => setShowQuestionModal(false)}
-                className="w-full bg-blue-500 text-white py-3 rounded-lg font-semibold hover:bg-blue-600 transition flex items-center justify-center gap-2"
+                className="w-full text-white py-3 rounded-lg font-semibold hover:opacity-90 transition flex items-center justify-center gap-2"
+                style={{ backgroundColor: PRIMARY_BLUE }}
               >
                 <Send className="w-4 h-4" />
                 질문 등록하기 (+30P)
@@ -4896,7 +4955,7 @@ const ReceiptFinancePlatform = () => {
       {showRewardModal && selectedReward && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl p-8 max-w-md w-full text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-4">
+            <div className="w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-4" style={{ backgroundColor: SUCCESS_GREEN, color: BRAND_COLOR }}>
               {selectedReward.icon}
             </div>
             <h3 className="text-2xl font-bold mb-2">교환 완료!</h3>
@@ -4912,7 +4971,8 @@ const ReceiptFinancePlatform = () => {
                 setShowRewardModal(false);
                 setSelectedReward(null);
               }}
-              className="w-full bg-blue-500 text-white py-3 rounded-lg font-semibold hover:bg-blue-600 transition"
+              className="w-full text-white py-3 rounded-lg font-semibold hover:opacity-90 transition"
+              style={{ backgroundColor: PRIMARY_BLUE }}
             >
               확인
             </button>
@@ -4937,10 +4997,14 @@ const ReceiptFinancePlatform = () => {
                 return (
                   <div key={insight.id} className="border-2 border-gray-200 rounded-lg p-4">
                     <div className="flex items-start gap-3">
-                      <div className={`w-12 h-12 ${insight.priority === 'high' ? 'bg-orange-100' : 'bg-blue-100'
-                        } rounded-lg flex items-center justify-center`}>
-                        <Icon className={`w-6 h-6 ${insight.priority === 'high' ? 'text-orange-600' : 'text-blue-600'
-                          }`} />
+                      <div
+                        className="w-12 h-12 rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: insight.priority === 'high' ? '#FFF3E6' : `${PRIMARY_BLUE}15` }}
+                      >
+                        <Icon
+                          className="w-6 h-6"
+                          style={{ color: insight.priority === 'high' ? '#EA580C' : PRIMARY_BLUE }}
+                        />
                       </div>
                       <div className="flex-1">
                         <div className="font-bold mb-1">{insight.title}</div>
@@ -4979,7 +5043,7 @@ const ReceiptFinancePlatform = () => {
                       <Folder className="w-5 h-5 text-blue-500" />
                       <h4 className="font-bold">{section.name}</h4>
                     </div>
-                    <span className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-semibold">
+                    <span className="text-sm px-3 py-1 rounded-full font-semibold" style={{ backgroundColor: `${PRIMARY_BLUE}20`, color: PRIMARY_BLUE }}>
                       {section.count}건
                     </span>
                   </div>
@@ -5023,10 +5087,11 @@ const ReceiptFinancePlatform = () => {
                   <button
                     onClick={() => generatePDFReport('monthly')}
                     disabled={isLoading}
-                    className="flex items-center justify-between p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
+                    className="flex items-center justify-between p-3 rounded-lg hover:opacity-80 transition"
+                    style={{ backgroundColor: `${PRIMARY_BLUE}15` }}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: PRIMARY_BLUE }}>
                         <Receipt className="w-5 h-5 text-white" />
                       </div>
                       <div className="text-left">
@@ -5034,7 +5099,7 @@ const ReceiptFinancePlatform = () => {
                         <div className="text-xs text-gray-500">거래내역, 예산현황, 카테고리 분석</div>
                       </div>
                     </div>
-                    <Download className="w-5 h-5 text-blue-500" />
+                    <Download className="w-5 h-5" style={{ color: PRIMARY_BLUE }} />
                   </button>
                   <button
                     onClick={() => generatePDFReport('yearEnd')}
@@ -5098,7 +5163,7 @@ const ReceiptFinancePlatform = () => {
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: BRAND_COLOR }}>
                         <Wallet className="w-5 h-5 text-white" />
                       </div>
                       <div className="text-left">
@@ -5106,14 +5171,15 @@ const ReceiptFinancePlatform = () => {
                         <div className="text-xs text-gray-500">카테고리별 예산 vs 실제</div>
                       </div>
                     </div>
-                    <Download className="w-5 h-5 text-purple-500" />
+                    <Download className="w-5 h-5" style={{ color: BRAND_COLOR }} />
                   </button>
                   <button
                     onClick={() => handleExcelExport('all')}
-                    className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg hover:from-blue-100 hover:to-purple-100 transition border border-blue-200"
+                    className="flex items-center justify-between p-3 rounded-lg hover:opacity-80 transition border"
+                    style={{ backgroundColor: `${PRIMARY_BLUE}10`, borderColor: `${PRIMARY_BLUE}30` }}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: PRIMARY_BLUE }}>
                         <FileText className="w-5 h-5 text-white" />
                       </div>
                       <div className="text-left">
@@ -5121,7 +5187,7 @@ const ReceiptFinancePlatform = () => {
                         <div className="text-xs text-gray-500">모든 데이터 통합 Excel</div>
                       </div>
                     </div>
-                    <Download className="w-5 h-5 text-purple-500" />
+                    <Download className="w-5 h-5" style={{ color: PRIMARY_BLUE }} />
                   </button>
                 </div>
               </div>
@@ -5133,21 +5199,37 @@ const ReceiptFinancePlatform = () => {
       {/* 연말정산 시뮬레이터 Modal */}
       {showTaxSimulatorModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="relative bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <button onClick={() => setShowTaxSimulatorModal(false)} className="absolute top-4 right-4">
+              <X className="w-6 h-6" />
+            </button>
             <div className="flex justify-between items-center mb-6">
-              <div>
-                <h3 className="text-xl font-bold">연말정산 시뮬레이터</h3>
-                <p className="text-sm text-gray-500">예상 세금을 미리 계산해보세요</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-xl font-bold">연말정산 시뮬레이터</h3>
+                  <span className="text-xs px-2 py-1 rounded-full border" style={{ backgroundColor: `${PRIMARY_BLUE}15`, color: PRIMARY_BLUE, borderColor: `${PRIMARY_BLUE}30` }}>예상치 · 교육용</span>
+                  <span className="text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">홈택스 신고 전 검증 필요</span>
+                </div>
+                <div className="flex flex-wrap gap-2 text-[11px] text-orange-700">
+                  <span className="px-2 py-1 bg-orange-50 border border-orange-200 rounded">의료·교육 특례 인별 한도 미반영(난임 제외)</span>
+                  <span className="px-2 py-1 bg-orange-50 border border-orange-200 rounded">업종별 부가세/간이과세 전환 구간 미적용</span>
+                  <span className="px-2 py-1 bg-orange-50 border border-orange-200 rounded">보험료·기부금 세부 규정 단순화</span>
+                </div>
               </div>
-              <button onClick={() => setShowTaxSimulatorModal(false)}>
-                <X className="w-6 h-6" />
-              </button>
             </div>
 
             <div className="grid md:grid-cols-2 gap-6">
               {/* 입력 폼 */}
               <div className="space-y-4">
-                <h4 className="font-semibold text-gray-700">소득 정보</h4>
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-semibold text-gray-700">소득 정보</h4>
+                  <button
+                    onClick={() => setShowTaxAdvanced(!showTaxAdvanced)}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition"
+                  >
+                    {showTaxAdvanced ? '세부 특례 접기' : '세부 특례 입력'}
+                  </button>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-1">연간 총급여</label>
                   <input
@@ -5182,10 +5264,22 @@ const ReceiptFinancePlatform = () => {
                     </label>
                   </div>
                 </div>
-
-                <h4 className="font-semibold text-gray-700 pt-2">공제 항목</h4>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">의료비</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">자녀 수 (선택)</label>
+                  <input
+                    type="number"
+                    value={taxSimulatorData.childDependents}
+                    onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, childDependents: Math.max(0, parseInt(e.target.value) || 0) })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                    min="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">미입력 시 부양가족 수와 동일하게 계산합니다.</p>
+                </div>
+
+                <h4 className="font-semibold text-gray-700 pt-2">간단 입력</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">의료비 (합계)</label>
                   <input
                     type="number"
                     value={taxSimulatorData.medicalExpenses}
@@ -5193,7 +5287,31 @@ const ReceiptFinancePlatform = () => {
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                   />
+                  <p className="text-xs text-gray-500 mt-1">세부 의료비 입력 시 이 값 대신 합산이 사용됩니다.</p>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">교육비 (합계)</label>
+                    <input
+                      type="number"
+                      value={taxSimulatorData.educationTotal}
+                      onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, educationTotal: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">기부금 (합계)</label>
+                    <input
+                      type="number"
+                      value={taxSimulatorData.donationsSimple}
+                      onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, donationsSimple: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1">연금저축</label>
@@ -5217,9 +5335,195 @@ const ReceiptFinancePlatform = () => {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">주택자금/월세 공제</label>
+                  <input
+                    type="number"
+                    value={taxSimulatorData.housingDeduction}
+                    onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, housingDeduction: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                {showTaxAdvanced && (
+                  <div className="space-y-4 border-t border-gray-200 pt-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Sparkles className="w-4 h-4 text-blue-500" />
+                        <h5 className="font-semibold text-gray-700">의료비 특례(요약 입력)</h5>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">일반</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.medicalGeneral}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, medicalGeneral: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">난임(20%)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.medicalInfertility}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, medicalInfertility: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">65세↑/장애/3자녀</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.medicalSenior}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, medicalSenior: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">인별/항목 한도는 단순 합산으로 반영됩니다.</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <GraduationCap className="w-4 h-4 text-indigo-500" />
+                        <h5 className="font-semibold text-gray-700">교육비 세부 입력</h5>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">본인</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.educationSelf}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, educationSelf: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">자녀(초·중·고)</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.educationChild}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, educationChild: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">대학/대학원</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.educationUniversity}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, educationUniversity: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">인별 한도/특례(장애, 다자녀)는 간략 합산으로만 반영됩니다.</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Heart className="w-4 h-4 text-rose-500" />
+                        <h5 className="font-semibold text-gray-700">기부금 구분</h5>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">법정</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.donationsLegal}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, donationsLegal: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">지정</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.donationsDesignated}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, donationsDesignated: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">종교</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.donationsReligious}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, donationsReligious: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">정치자금</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.donationsPolitical}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, donationsPolitical: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">소득 대비 한도/종교 구분은 단순 합산으로 계산됩니다.</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Shield className="w-4 h-4 text-emerald-500" />
+                        <h5 className="font-semibold text-gray-700">보험료 입력</h5>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">국민연금</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.insuranceNational}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, insuranceNational: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">건강보험</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.insuranceHealth}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, insuranceHealth: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">고용보험</label>
+                          <input
+                            type="number"
+                            value={taxSimulatorData.insuranceEmployment}
+                            onChange={(e) => setTaxSimulatorData({ ...taxSimulatorData, insuranceEmployment: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">보장성 보험료 100만원 한도 등은 별도 특례로 미반영.</p>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   onClick={calculateTaxSimulation}
-                  className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition flex items-center justify-center gap-2"
+                  className="w-full text-white py-3 rounded-lg font-semibold hover:opacity-90 transition flex items-center justify-center gap-2"
+                  style={{ backgroundColor: PRIMARY_BLUE }}
                 >
                   <Calculator className="w-5 h-5" />
                   세금 계산하기
@@ -5251,13 +5555,38 @@ const ReceiptFinancePlatform = () => {
                       <div className="text-sm text-gray-500">세액공제</div>
                       <div className="text-lg font-bold text-green-600">-{(taxSimulatorResult.taxCredits + taxSimulatorResult.earnedIncomeTaxCredit).toLocaleString()}원</div>
                     </div>
-                    <div className="bg-gradient-to-r from-red-500 to-orange-500 rounded-lg p-4 text-white">
+                    <div className="bg-red-500 rounded-lg p-4 text-white shadow-flat">
                       <div className="text-sm opacity-90">예상 총 세금</div>
                       <div className="text-2xl font-bold">{taxSimulatorResult.totalTax.toLocaleString()}원</div>
                       <div className="text-sm opacity-90 mt-1">
                         실효세율: {taxSimulatorResult.effectiveRate}% | 월 {taxSimulatorResult.monthlyTax.toLocaleString()}원
                       </div>
                     </div>
+
+                    {(() => {
+                      const meta = taxSimulatorResult.meta || {};
+                      const insurancePremiums = meta.insurancePremiums || {};
+                          const insuranceTotal = (insurancePremiums.national || 0) + (insurancePremiums.health || 0) + (insurancePremiums.employment || 0);
+                          const donationSum = Object.values(meta.donations || {}).reduce((sum, v) => sum + (v || 0), 0);
+                          const educationSum = Object.values(meta.educationExpenses || {}).reduce((sum, v) => sum + (v || 0), 0);
+                          const childCount = meta.childDependents || 0;
+                          return (
+                            <div className="bg-white rounded-lg p-3 border">
+                              <div className="text-xs text-gray-500 mb-2">입력 요약</div>
+                              <div className="text-xs text-gray-700 space-y-1">
+                                <div className="flex justify-between"><span>의료비</span><span>{(meta.medicalTotal || 0).toLocaleString()}원{meta.hasInfertility ? ' (난임 20% 적용)' : ''}</span></div>
+                                <div className="flex justify-between"><span>교육비</span><span>{educationSum.toLocaleString()}원</span></div>
+                                <div className="flex justify-between"><span>기부금</span><span>{donationSum.toLocaleString()}원</span></div>
+                                <div className="flex justify-between"><span>보험료</span><span>{insuranceTotal.toLocaleString()}원</span></div>
+                                <div className="flex justify-between"><span>주택 공제</span><span>{(taxSimulatorData.housingDeduction || 0).toLocaleString()}원</span></div>
+                                <div className="flex justify-between"><span>자녀 세액공제</span><span>{childCount > 0 ? `${childCount}명 반영` : '입력 없음'}</span></div>
+                              </div>
+                              <div className="text-[11px] text-orange-600 mt-2">
+                                특례·인별 한도는 단순 계산(난임 제외)이며, 실제 신고 전 최신 고시와 홈택스 결과를 확인하세요.
+                              </div>
+                            </div>
+                      );
+                    })()}
 
                     <button
                       onClick={() => generatePDFReport('yearEnd')}
