@@ -220,6 +220,65 @@ export const budgetsAPI = {
       .select();
     if (error) throw error;
     return data;
+  },
+
+  // 월별 지출 추이 데이터 (최근 6개월)
+  getMonthlySpendingTrend: async (userId) => {
+    const now = new Date();
+    const months = [];
+
+    // 최근 6개월 목록 생성
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        yearMonth: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: `${d.getMonth() + 1}월`
+      });
+    }
+
+    // 6개월치 데이터 범위
+    const startDate = `${months[0].yearMonth}-01`;
+    const endDate = `${months[5].yearMonth}-31`;
+
+    // 지출 데이터 (receipts)
+    const { data: receiptsData, error: receiptsError } = await supabase
+      .from('receipts')
+      .select('date, amount')
+      .eq('user_id', userId)
+      .gte('date', startDate)
+      .lte('date', endDate);
+
+    if (receiptsError) throw receiptsError;
+
+    // 예산 데이터 (budgets)
+    const { data: budgetsData, error: budgetsError } = await supabase
+      .from('budgets')
+      .select('month, amount')
+      .eq('user_id', userId)
+      .in('month', months.map(m => m.yearMonth));
+
+    if (budgetsError) throw budgetsError;
+
+    // 월별 집계
+    const result = months.map(m => {
+      // 해당 월 지출 합계
+      const monthSpending = receiptsData
+        ?.filter(r => r.date.startsWith(m.yearMonth))
+        .reduce((sum, r) => sum + (r.amount || 0), 0) || 0;
+
+      // 해당 월 예산 합계
+      const monthBudget = budgetsData
+        ?.filter(b => b.month === m.yearMonth)
+        .reduce((sum, b) => sum + (b.amount || 0), 0) || 0;
+
+      return {
+        month: m.label,
+        지출: monthSpending,
+        예산: monthBudget
+      };
+    });
+
+    return result;
   }
 };
 
@@ -430,6 +489,34 @@ export const insightsAPI = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  // OpenAI로 새 인사이트 생성 (Edge Function 호출)
+  generateWithAI: async (userId) => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\s/g, '');
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.replace(/\s/g, '');
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/generate-ai-insights`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'apikey': supabaseAnonKey,
+      },
+      body: JSON.stringify({ userId }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`AI 인사이트 생성 실패: ${errorText}`);
+    }
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'AI 인사이트 생성 실패');
+    }
+
+    return result.insights;
   }
 };
 

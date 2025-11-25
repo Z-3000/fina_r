@@ -79,6 +79,14 @@ import {
   getTrendColor,
 } from './constants/colors';
 
+// ===== View Components =====
+import DashboardView from './components/views/DashboardView';
+import ReceiptsView from './components/views/ReceiptsView';
+import BudgetView from './components/views/BudgetView';
+import TaxPredictionView from './components/views/TaxPredictionView';
+import BenefitsView from './components/views/BenefitsView';
+import ChallengesView from './components/views/ChallengesView';
+
 // ===== 숫자 입력 유틸리티 함수 =====
 // Focus 시 0이면 빈 문자열로 (입력 편의)
 const handleNumberFocus = (e) => {
@@ -338,6 +346,7 @@ const ReceiptFinancePlatform = () => {
 
   // Real-time AI Insights (세무사급 AI 알림) - API에서 로드
   const [aiInsights, setAiInsights] = useState([]);
+  const [isRefreshingAI, setIsRefreshingAI] = useState(false);
 
   // Deduction Tracker (공제 항목 자동 추적) - API에서 로드
   const [deductionTracker, setDeductionTracker] = useState({});
@@ -389,6 +398,7 @@ const ReceiptFinancePlatform = () => {
   const [challenges, setChallenges] = useState([]);
   const [completedChallenges, setCompletedChallenges] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [monthlySpendingTrendData, setMonthlySpendingTrendData] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
   // Community, Receipts, Budgets - API에서 로드
@@ -460,6 +470,7 @@ const ReceiptFinancePlatform = () => {
         communityPostsData,
         taxExpertsData,
         financialProductsData,
+        monthlySpendingTrendResult,
       ] = await Promise.all([
         receiptsAPI.getAll(uid).catch(() => []),
         autoTransactionsAPI.getAll(uid).catch(() => []),
@@ -483,6 +494,7 @@ const ReceiptFinancePlatform = () => {
         communityAPI.getPosts().catch(() => []),
         expertsAPI.getAll().catch(() => []),
         productsAPI.getAll().catch(() => []),
+        budgetsAPI.getMonthlySpendingTrend(uid).catch(() => []),
       ]);
 
       console.log('📦 receiptsData:', receiptsData?.length || 0, '건');
@@ -511,6 +523,7 @@ const ReceiptFinancePlatform = () => {
       if (communityPostsData?.length > 0) setCommunityPosts(communityPostsData);
       if (taxExpertsData?.length > 0) setTaxExperts(taxExpertsData);
       if (financialProductsData?.length > 0) setFinancialProducts(financialProductsData);
+      if (monthlySpendingTrendResult?.length > 0) setMonthlySpendingTrendData(monthlySpendingTrendResult);
 
       // AI 인사이트에 아이콘 추가
       if (aiInsightsData?.length > 0) {
@@ -847,6 +860,32 @@ const ReceiptFinancePlatform = () => {
           streak: userProfile.streak + 1,
         });
       }
+    }
+  };
+
+  // AI 인사이트 새로고침 (OpenAI 호출)
+  const handleRefreshAIInsights = async () => {
+    if (!currentUser?.id) return;
+
+    setIsRefreshingAI(true);
+    try {
+      const newInsights = await insightsAPI.generateWithAI(currentUser.id);
+
+      // 아이콘 매핑 추가
+      const iconMap = { medical: Pill, education: GraduationCap, card: CreditCard, housing: Home, pension: Wallet, donation: Heart };
+      const insightsWithIcons = newInsights.map(insight => ({
+        ...insight,
+        icon: iconMap[insight.category] || AlertCircle,
+        potentialSaving: insight.potential_saving,
+      }));
+
+      setAiInsights(insightsWithIcons);
+      console.log('✅ AI 인사이트 새로고침 완료!', newInsights.length + '건');
+    } catch (error) {
+      console.error('AI 인사이트 생성 실패:', error);
+      alert('AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsRefreshingAI(false);
     }
   };
 
@@ -1657,8 +1696,8 @@ const ReceiptFinancePlatform = () => {
     });
   }, [deductionTracker, autoTransactions, receipts, userProfile, userType, documentSpace]);
 
-  // Dashboard View
-  const DashboardView = () => (
+  // Dashboard View (deprecated - using imported component)
+  const _DashboardView = () => (
     <div className="space-y-6">
       {/* User Profile with Tax Health Score */}
       <div
@@ -2317,8 +2356,8 @@ const ReceiptFinancePlatform = () => {
     </div>
   );
 
-  // Enhanced Receipts View
-  const ReceiptsView = () => (
+  // Enhanced Receipts View (deprecated - using imported component)
+  const _ReceiptsView = () => (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">거래 내역 관리</h2>
@@ -2695,12 +2734,17 @@ const ReceiptFinancePlatform = () => {
   );
 
   // Budget View
-  // 월별 지출 데이터 계산
+  // 월별 지출 데이터 계산 - DB 데이터 우선 사용
   const monthlySpendingData = useMemo(() => {
+    // DB에서 로드된 데이터가 있으면 사용
+    if (monthlySpendingTrendData?.length > 0) {
+      return monthlySpendingTrendData;
+    }
+
+    // 폴백: 로컬 데이터로 계산
     const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
     const currentMonth = new Date().getMonth();
 
-    // 최근 6개월 데이터 생성
     return months.slice(Math.max(0, currentMonth - 5), currentMonth + 1).map((month, idx) => {
       const monthReceipts = receipts.filter(r => {
         const receiptMonth = new Date(r.date).getMonth();
@@ -2709,7 +2753,7 @@ const ReceiptFinancePlatform = () => {
       const total = monthReceipts.reduce((sum, r) => sum + r.amount, 0);
       return { month, 지출: total, 예산: Object.values(budgets).reduce((a, b) => a + b, 0) };
     });
-  }, [receipts, budgets]);
+  }, [monthlySpendingTrendData, receipts, budgets]);
 
   // 예산 vs 실제 비교 데이터
   const budgetComparisonData = useMemo(() => {
@@ -2721,7 +2765,8 @@ const ReceiptFinancePlatform = () => {
     }));
   }, [stats.budgetUsage]);
 
-  const BudgetView = () => (
+  // BudgetView (deprecated - using imported component)
+  const _BudgetView = () => (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">예산 관리</h2>
 
@@ -2913,7 +2958,7 @@ const ReceiptFinancePlatform = () => {
     .filter(d => checkedDeductions.includes(d.id))
     .reduce((sum, d) => sum + d.estimatedSaving, 0);
 
-  // Tax Prediction View
+  // Tax Prediction View (deprecated - using imported component)
   // 연말정산 계산기 슬라이더 state
   const [calcIncome, setCalcIncome] = useState(taxBasicInfo.annualIncome);
   const [calcCreditCard, setCalcCreditCard] = useState(Math.floor(taxBasicInfo.annualIncome * 0.3));
@@ -3074,7 +3119,7 @@ const ReceiptFinancePlatform = () => {
     });
   }, [receipts, taxBasicInfo, userType]);
 
-  const TaxPredictionView = () => {
+  const _TaxPredictionView = () => {
     // DB 데이터 대신 실제 계산된 데이터 사용
     const taxData = calculatedTaxData;
     const currentMonth = new Date().getMonth();
@@ -3774,8 +3819,8 @@ const ReceiptFinancePlatform = () => {
 
   const eligibleBenefitsCount = benefitsData.filter(b => b.eligible).length;
 
-  // Benefits View
-  const BenefitsView = () => (
+  // Benefits View (deprecated - using imported component)
+  const _BenefitsView = () => (
     <div className="space-y-6">
       {/* 헤더 */}
       <div className="text-center">
@@ -3896,8 +3941,8 @@ const ReceiptFinancePlatform = () => {
     </div>
   );
 
-  // Challenges View
-  const ChallengesView = () => (
+  // Challenges View (deprecated - using imported component)
+  const _ChallengesView = () => (
     <div className="space-y-6">
       {/* User Stats Summary */}
       <div className="grid md:grid-cols-4 gap-4">
@@ -4488,12 +4533,117 @@ const ReceiptFinancePlatform = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {currentTab === 'dashboard' && <DashboardView />}
-        {currentTab === 'receipts' && <ReceiptsView />}
-        {currentTab === 'budget' && <BudgetView />}
-        {currentTab === 'prediction' && <TaxPredictionView />}
-        {currentTab === 'benefits' && <BenefitsView />}
-        {currentTab === 'challenges' && <ChallengesView />}
+        {currentTab === 'dashboard' && (
+          <DashboardView
+            activeTheme={activeTheme}
+            userProfile={userProfile}
+            isPremium={isPremium}
+            userType={userType}
+            taxHealthScore={taxHealthScore}
+            aiInsights={aiInsights}
+            deductionTracker={deductionTracker}
+            detailedTaxHealthScores={detailedTaxHealthScores}
+            attendanceChecked={attendanceChecked}
+            stats={stats}
+            pieChartData={pieChartData}
+            chartPalette={chartPalette}
+            setShowSettingsModal={setShowSettingsModal}
+            setShowAIInsightModal={setShowAIInsightModal}
+            setShowPDFReportModal={setShowPDFReportModal}
+            setShowTaxSimulatorModal={setShowTaxSimulatorModal}
+            setShowDocSpaceModal={setShowDocSpaceModal}
+            handleAttendanceCheck={handleAttendanceCheck}
+            handleRefreshAIInsights={handleRefreshAIInsights}
+            isRefreshingAI={isRefreshingAI}
+          />
+        )}
+        {currentTab === 'receipts' && (
+          <ReceiptsView
+            linkedAccounts={linkedAccounts}
+            stats={stats}
+            transactionFilters={transactionFilters}
+            itemsPerPage={itemsPerPage}
+            currentPage={currentPage}
+            uniqueBanks={uniqueBanks}
+            uniqueCategories={uniqueCategories}
+            totalFilteredTransactions={totalFilteredTransactions}
+            totalPages={totalPages}
+            setShowValueModal={setShowValueModal}
+            setShowReceiptModal={setShowReceiptModal}
+            setShowAccountLinkModal={setShowAccountLinkModal}
+            setTransactionFilters={setTransactionFilters}
+            setCurrentPage={setCurrentPage}
+            setItemsPerPage={setItemsPerPage}
+            handleUnlinkAccount={handleUnlinkAccount}
+            getCombinedTransactions={getCombinedTransactions}
+            handleTransactionClick={handleTransactionClick}
+            handleDeleteTransaction={handleDeleteTransaction}
+          />
+        )}
+        {currentTab === 'budget' && (
+          <BudgetView
+            activeTheme={activeTheme}
+            stats={stats}
+            budgets={budgets}
+            monthlySpendingData={monthlySpendingData}
+            budgetComparisonData={budgetComparisonData}
+            setBudgets={setBudgets}
+          />
+        )}
+        {currentTab === 'prediction' && (
+          <TaxPredictionView
+            activeTheme={activeTheme}
+            userType={userType}
+            isPremium={isPremium}
+            receipts={receipts}
+            calculatedTaxData={calculatedTaxData}
+            calcIncome={calcIncome}
+            calcCreditCard={calcCreditCard}
+            calcCashReceipt={calcCashReceipt}
+            calcMedical={calcMedical}
+            calcEducation={calcEducation}
+            calcRefund={calcRefund}
+            creditCardRatio={creditCardRatio}
+            checkedDeductions={checkedDeductions}
+            deductionItems={deductionItems}
+            deductionCompletionRate={deductionCompletionRate}
+            totalDeductionSavings={totalDeductionSavings}
+            setUserType={setUserType}
+            setCalcIncome={setCalcIncome}
+            setCalcCreditCard={setCalcCreditCard}
+            setCalcCashReceipt={setCalcCashReceipt}
+            setCalcMedical={setCalcMedical}
+            setCalcEducation={setCalcEducation}
+            handleDeductionCheck={handleDeductionCheck}
+          />
+        )}
+        {currentTab === 'benefits' && (
+          <BenefitsView
+            activeTheme={activeTheme}
+            benefitsCategory={benefitsCategory}
+            benefitsData={benefitsData}
+            benefitsCategories={benefitsCategories}
+            filteredBenefits={filteredBenefits}
+            eligibleBenefitsCount={eligibleBenefitsCount}
+            setBenefitsCategory={setBenefitsCategory}
+          />
+        )}
+        {currentTab === 'challenges' && (
+          <ChallengesView
+            activeTheme={activeTheme}
+            userProfile={userProfile}
+            challengeStats={challengeStats}
+            allBadges={allBadges}
+            unlockedBadges={unlockedBadges}
+            lockedBadges={lockedBadges}
+            leaderboard={leaderboard}
+            weeklyMissions={weeklyMissions}
+            challenges={challenges}
+            completedChallenges={completedChallenges}
+            rewards={rewards}
+            handleRewardExchange={handleRewardExchange}
+          />
+        )}
       </main>
 
       {/* Receipt Modal */}

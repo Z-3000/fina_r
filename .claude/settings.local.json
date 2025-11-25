@@ -38,7 +38,9 @@
       "Bash(taskkill:*)",
       "Bash(pkill:*)",
       "Bash(find:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx eslint:*)"
     ],
     "deny": [],
     "ask": []
