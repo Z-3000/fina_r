@@ -8,7 +8,16 @@
  * - 4대보험 상·하한 적용
  * - 월세 세액공제 한도 1,000만원, 소득기준 8천만원
  * - 연금저축 600만원, IRP 포함 900만원
+ * - 소상공인 세액공제 (노란우산, 신용카드 매출, 간이과세)
  */
+
+// 소상공인/사업자 세금 상수
+import {
+  YELLOW_UMBRELLA_DEDUCTION,
+  INDUSTRY_VALUE_ADDED_RATES,
+  SIMPLIFIED_TAX_CRITERIA,
+  CARD_SALES_TAX_CREDIT,
+} from '../constants/businessTaxConstants';
 
 // =============================================
 // 2025년 기준 소득세율표 (과세표준) - 변동 없음
@@ -1500,6 +1509,381 @@ export const calculateMarriageCredit = ({
   };
 };
 
+// =============================================
+// 소상공인/사업자 세금 계산 함수
+// =============================================
+
+/**
+ * 노란우산공제 계산 (2025년 기준)
+ * - 소득공제 방식 (세액공제 아님)
+ * - 소기업·소상공인, 프리랜서 대상
+ * - 법인대표자: 총급여 8천만원 이하만 가능
+ *
+ * @param {Object} params
+ * @param {number} params.annualContribution - 연간 납입액 (원)
+ * @param {number} params.businessIncome - 사업소득금액 또는 근로소득금액 (원)
+ * @param {string} params.businessType - 'individual' | 'corporate' | 'freelancer'
+ * @param {number} params.corporateSalary - 법인대표자의 경우 총급여 (원)
+ * @returns {Object} 공제 계산 결과
+ */
+export const calculateYellowUmbrellaDeduction = ({
+  annualContribution = 0,
+  businessIncome = 0,
+  businessType = 'individual',
+  corporateSalary = 0,
+}) => {
+  const { deductionLimits, contribution, eligibility } = YELLOW_UMBRELLA_DEDUCTION;
+
+  // 가입 자격 체크
+  const eligibilityCheck = {
+    isEligible: true,
+    reasons: [],
+  };
+
+  // 법인대표자 급여 기준 체크
+  if (businessType === 'corporate') {
+    if (!eligibility.corporateCeo.eligible) {
+      eligibilityCheck.isEligible = false;
+      eligibilityCheck.reasons.push('법인대표자 가입 불가');
+    } else if (corporateSalary > eligibility.corporateCeo.maxSalary) {
+      eligibilityCheck.isEligible = false;
+      eligibilityCheck.reasons.push(
+        `법인대표자 총급여 ${(eligibility.corporateCeo.maxSalary / 10000).toLocaleString()}만원 초과`
+      );
+    }
+  }
+
+  // 근로소득자 체크
+  if (businessType === 'employee') {
+    eligibilityCheck.isEligible = false;
+    eligibilityCheck.reasons.push('근로소득자는 가입 불가 (사업소득/프리랜서만)');
+  }
+
+  if (!eligibilityCheck.isEligible) {
+    return {
+      annualContribution,
+      deductionLimit: 0,
+      actualDeduction: 0,
+      taxSavings: 0,
+      eligibility: eligibilityCheck,
+    };
+  }
+
+  // 납입액 유효성 체크
+  const validContribution = Math.min(annualContribution, contribution.annualMax);
+
+  // 소득구간별 공제한도 결정
+  const incomeForLimit = businessType === 'corporate' ? corporateSalary : businessIncome;
+  let deductionLimit = 0;
+  let incomeCategory = '';
+
+  for (const bracket of deductionLimits) {
+    if (incomeForLimit <= bracket.maxIncome) {
+      deductionLimit = bracket.limit;
+      incomeCategory = bracket.description;
+      break;
+    }
+  }
+
+  // 실제 공제액 (납입액과 한도 중 작은 값)
+  const actualDeduction = Math.min(validContribution, deductionLimit);
+
+  // 예상 절세액 계산 (한계세율 적용)
+  const marginalRate = getMarginalTaxRate(incomeForLimit);
+  const taxSavings = Math.floor(actualDeduction * marginalRate);
+
+  return {
+    annualContribution,
+    validContribution,
+    deductionLimit,
+    actualDeduction,
+    incomeCategory,
+    marginalRate,
+    taxSavings,
+    localTaxSavings: Math.floor(taxSavings * 0.1),  // 지방소득세 절감
+    totalTaxSavings: Math.floor(taxSavings * 1.1),  // 총 절세액
+    eligibility: eligibilityCheck,
+    unusedLimit: deductionLimit - actualDeduction,
+    deductionType: '소득공제',
+  };
+};
+
+/**
+ * 신용카드 매출 세액공제 계산 (2024~2026년 기준)
+ * - 개인사업자만 적용 (법인 제외)
+ * - 간이과세자/일반과세자 모두 가능
+ *
+ * @param {Object} params
+ * @param {number} params.annualCardSales - 연간 신용카드/현금영수증 매출액 (원)
+ * @param {string} params.businessType - 'individual' | 'corporate'
+ * @param {boolean} params.isSimplified - 간이과세자 여부
+ * @returns {Object} 세액공제 계산 결과
+ */
+export const calculateCardSalesTaxCredit = ({
+  annualCardSales = 0,
+  businessType = 'individual',
+  isSimplified = false,
+}) => {
+  const { meta, rates, annualLimit, eligibility, scheduledChanges } = CARD_SALES_TAX_CREDIT;
+
+  // 적용 자격 체크
+  const eligibilityCheck = {
+    isEligible: true,
+    reasons: [],
+  };
+
+  if (businessType === 'corporate') {
+    eligibilityCheck.isEligible = false;
+    eligibilityCheck.reasons.push('법인사업자는 적용 제외');
+  }
+
+  if (!eligibilityCheck.isEligible) {
+    return {
+      annualCardSales,
+      creditAmount: 0,
+      appliedRate: 0,
+      eligibility: eligibilityCheck,
+    };
+  }
+
+  // 매출 구간별 공제액 계산
+  let totalCredit = 0;
+  let remainingSales = annualCardSales;
+  const breakdown = [];
+
+  for (const bracket of rates) {
+    if (remainingSales <= 0) break;
+
+    const prevMax = rates[rates.indexOf(bracket) - 1]?.maxSales || 0;
+    const bracketSales = Math.min(remainingSales, bracket.maxSales - prevMax);
+
+    if (bracketSales > 0 && bracket.rate > 0) {
+      const credit = Math.floor(bracketSales * bracket.rate);
+      totalCredit += credit;
+      breakdown.push({
+        sales: bracketSales,
+        rate: bracket.rate,
+        credit,
+        description: bracket.description,
+      });
+    }
+
+    remainingSales -= bracketSales;
+  }
+
+  // 연간 한도 적용
+  const finalCredit = Math.min(totalCredit, annualLimit);
+  const limitApplied = totalCredit > annualLimit;
+
+  // 2027년 이후 변경 예정 알림
+  const scheduledChangeWarning = scheduledChanges?.status === 'scheduled'
+    ? `⚠️ ${scheduledChanges.effectiveFrom}부터 공제율 축소 예정 (한도 ${(scheduledChanges.annualLimit / 10000).toLocaleString()}만원)`
+    : null;
+
+  return {
+    annualCardSales,
+    calculatedCredit: totalCredit,
+    creditAmount: finalCredit,
+    annualLimit,
+    limitApplied,
+    breakdown,
+    effectiveRate: annualCardSales > 0
+      ? ((finalCredit / annualCardSales) * 100).toFixed(3)
+      : 0,
+    eligibility: eligibilityCheck,
+    isSimplified,
+    meta: {
+      effectiveFrom: meta.effectiveFrom,
+      effectiveTo: meta.effectiveTo,
+    },
+    scheduledChangeWarning,
+    deductionType: '세액공제',
+  };
+};
+
+/**
+ * 간이과세자 부가세 계산 (업종별 부가가치율 적용)
+ *
+ * @param {Object} params
+ * @param {number} params.annualSales - 연간 매출액 (원)
+ * @param {number} params.annualPurchases - 연간 매입액 (원)
+ * @param {string} params.industryCode - 업종 코드 (INDUSTRY_VALUE_ADDED_RATES.rates 키)
+ * @returns {Object} 부가세 계산 결과
+ */
+export const calculateSimplifiedVAT = ({
+  annualSales = 0,
+  annualPurchases = 0,
+  industryCode = 'otherServices',
+}) => {
+  const { rates } = INDUSTRY_VALUE_ADDED_RATES;
+  const { threshold, vatExemptThreshold, relief, inputTaxCreditRate } = SIMPLIFIED_TAX_CRITERIA;
+
+  // 업종 정보 조회
+  const industry = rates[industryCode] || rates.otherServices;
+  const valueAddedRate = industry.rate;
+  const vatRate = industry.vatRate;  // 실효세율 (부가가치율 × 10%)
+
+  // 간이과세 적용 가능 여부 체크
+  const applicableThreshold = industry.specialThreshold || threshold.general;
+  const isEligibleForSimplified = annualSales < applicableThreshold;
+
+  // 부가세 면제 여부 (4,800만원 미만)
+  const isVatExempt = annualSales < vatExemptThreshold;
+
+  if (isVatExempt) {
+    return {
+      annualSales,
+      annualPurchases,
+      industry: {
+        code: industryCode,
+        name: industry.name,
+        valueAddedRate,
+        vatRate,
+      },
+      isEligibleForSimplified: true,
+      isVatExempt: true,
+      vatPayable: 0,
+      message: `매출 ${(vatExemptThreshold / 10000).toLocaleString()}만원 미만으로 부가세 납부 면제`,
+    };
+  }
+
+  if (!isEligibleForSimplified) {
+    return {
+      annualSales,
+      annualPurchases,
+      industry: {
+        code: industryCode,
+        name: industry.name,
+        valueAddedRate,
+        vatRate,
+      },
+      isEligibleForSimplified: false,
+      isVatExempt: false,
+      vatPayable: null,
+      message: `매출 ${(applicableThreshold / 10000).toLocaleString()}만원 이상으로 일반과세자 전환 필요`,
+      recommendedAction: '일반과세자 신고로 전환하세요',
+    };
+  }
+
+  // 간이과세자 부가세 계산
+  // 매출세액 = 매출 × 업종별 부가가치율 × 10%
+  const outputVat = Math.floor(annualSales * valueAddedRate * 0.1);
+
+  // 매입세액공제 = 매입세액 × 50%
+  const inputVatBeforeCredit = Math.floor(annualPurchases * 0.1);
+  const inputVatCredit = Math.floor(inputVatBeforeCredit * inputTaxCreditRate);
+
+  // 납부세액 (경감 전)
+  const vatBeforeRelief = Math.max(0, outputVat - inputVatCredit);
+
+  // 납부세액 경감 (50%, 최대 100만원)
+  const reliefAmount = Math.min(
+    Math.floor(vatBeforeRelief * relief.rate),
+    relief.cap
+  );
+
+  // 최종 납부세액
+  const vatPayable = Math.max(0, vatBeforeRelief - reliefAmount);
+
+  return {
+    annualSales,
+    annualPurchases,
+    industry: {
+      code: industryCode,
+      name: industry.name,
+      valueAddedRate,
+      vatRate,
+    },
+    isEligibleForSimplified: true,
+    isVatExempt: false,
+    calculation: {
+      outputVat,
+      inputVatBeforeCredit,
+      inputVatCredit,
+      vatBeforeRelief,
+      reliefAmount,
+      reliefRate: relief.rate,
+      reliefCap: relief.cap,
+    },
+    vatPayable,
+    effectiveRate: annualSales > 0
+      ? ((vatPayable / annualSales) * 100).toFixed(2)
+      : 0,
+    applicableThreshold,
+    overThreshold: annualSales >= applicableThreshold,
+    thresholdWarning: annualSales >= applicableThreshold * 0.9
+      ? `⚠️ 매출이 간이과세 기준(${(applicableThreshold / 10000).toLocaleString()}만원)의 90% 이상입니다`
+      : null,
+  };
+};
+
+/**
+ * 일반과세자 부가세 계산
+ *
+ * @param {Object} params
+ * @param {number} params.annualSales - 연간 매출액 (원)
+ * @param {number} params.annualPurchases - 연간 매입액 (원)
+ * @param {string} [params.industryCode] - 업종 코드 (선택, 참고용)
+ * @returns {Object} 부가세 계산 결과
+ */
+export const calculateGeneralVAT = ({
+  annualSales = 0,
+  annualPurchases = 0,
+  industryCode = null,
+}) => {
+  // 일반과세자: 매출세액 - 매입세액
+  const outputVat = Math.floor(annualSales * 0.1);
+  const inputVat = Math.floor(annualPurchases * 0.1);
+
+  // 납부세액 (음수면 환급)
+  const netVat = outputVat - inputVat;
+  const vatPayable = Math.max(0, netVat);
+  const vatRefund = Math.max(0, -netVat);
+
+  // 업종 정보 (있으면 포함)
+  let industryInfo = null;
+  if (industryCode) {
+    const { rates } = INDUSTRY_VALUE_ADDED_RATES;
+    const industry = rates[industryCode];
+    if (industry) {
+      industryInfo = {
+        code: industryCode,
+        name: industry.name,
+        valueAddedRate: industry.rate,
+      };
+    }
+  }
+
+  return {
+    annualSales,
+    annualPurchases,
+    industry: industryInfo,
+    isGeneralTaxpayer: true,
+    isSimplified: false,
+    calculation: {
+      outputVat,
+      inputVat,
+      netVat,
+    },
+    vatPayable,
+    vatRefund,
+    effectiveRate: annualSales > 0
+      ? ((vatPayable / annualSales) * 100).toFixed(2)
+      : '0.00',
+    summary: vatRefund > 0
+      ? `환급 예상: ${vatRefund.toLocaleString()}원`
+      : `납부 예상: ${vatPayable.toLocaleString()}원`,
+  };
+};
+
+/**
+ * 업종 목록 조회 (UI 드롭다운용)
+ * @returns {Array} 업종 목록
+ */
+export const getIndustryList = () => {
+  return INDUSTRY_VALUE_ADDED_RATES.list;
+};
+
 export default {
   calculateIndividualTax,
   calculateBusinessTax,
@@ -1525,4 +1909,10 @@ export default {
   calculateAnnualInsurancePremiums,
   calculateRentTaxCredit,
   calculateMarriageCredit,
+  // 소상공인/사업자 세금 함수
+  calculateYellowUmbrellaDeduction,
+  calculateCardSalesTaxCredit,
+  calculateSimplifiedVAT,
+  calculateGeneralVAT,
+  getIndustryList,
 };

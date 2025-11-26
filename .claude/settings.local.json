@@ -40,7 +40,8 @@
       "Bash(find:*)",
       "Bash(wc:*)",
       "Bash(mkdir:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(node --check:*)"
     ],
     "deny": [],
     "ask": []

@@ -705,7 +705,7 @@ const DashboardView = ({
             <TrendingUp className="w-5 h-5" />
             <span className="text-xs bg-white/30 px-2 py-1 rounded-full">절감액</span>
           </div>
-          <div className="text-2xl font-bold text-right tabular-nums">{Math.floor(userProfile.totalSaved / 1000)}천원</div>
+          <div className="text-2xl font-bold text-right tabular-nums">{Math.floor(userProfile.totalSaved / 1000).toLocaleString()}천원</div>
           <div className="text-xs opacity-80">누적 절감</div>
         </div>
 

@@ -79,6 +79,7 @@ import {
   getScoreColor,
   getTrendColor,
 } from './constants/colors';
+import { BIZ_CALC_DEFAULTS } from './constants/businessTaxConstants';
 
 // ===== View Components =====
 import DashboardView from './components/views/DashboardView';
@@ -3005,6 +3006,25 @@ const ReceiptFinancePlatform = () => {
   const calcRefund = calculateSimpleRefund();
   const creditCardRatio = calcIncome > 0 ? ((calcCreditCard / calcIncome) * 100).toFixed(1) : 0;
 
+  // 사업자 세금 계산기 state (상수에서 초기값 로드)
+  const [bizCalcState, setBizCalcState] = useState({
+    ...BIZ_CALC_DEFAULTS.defaults,
+    businessIncome: 0,            // 사업소득 (자동 계산)
+  });
+
+  // 사업자 계산기 입력값 변경 핸들러
+  const handleBizCalcChange = (field, value) => {
+    setBizCalcState(prev => ({
+      ...prev,
+      [field]: value,
+      // 매출/매입 변경 시 사업소득 자동 계산
+      ...(field === 'annualSales' || field === 'annualPurchases'
+        ? { businessIncome: (field === 'annualSales' ? value : prev.annualSales) -
+                           (field === 'annualPurchases' ? value : prev.annualPurchases) }
+        : {})
+    }));
+  };
+
   // 실제 데이터 기반 월별 세금 예측 계산 (복합형)
   const calculatedTaxData = useMemo(() => {
     const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -3117,12 +3137,16 @@ const ReceiptFinancePlatform = () => {
           isPast,
         };
       } else {
-        // 사업자: 분기별 납부 패턴
+        // 사업자: DB 데이터 우선 사용, 없으면 계산값 사용
+        const dbData = businessTaxData.find(d => d.month === month);
         const isQuarterMonth = [0, 3, 6, 9].includes(idx);
         const quarterlyTax = isQuarterMonth && businessTax ? businessTax.quarterlyTax : 0;
         const quarterlyTaxNoDeduction = isQuarterMonth && businessTaxNoDeduction ? businessTaxNoDeduction.quarterlyTax : 0;
-        const monthlyRevenue = taxBasicInfo.expectedRevenue ? Math.floor(taxBasicInfo.expectedRevenue / 12) : 0;
-        const monthlyExp = monthData.total || (taxBasicInfo.expectedExpenses ? Math.floor(taxBasicInfo.expectedExpenses / 12) : 0);
+
+        // DB에 데이터가 있으면 사용, 없으면 taxBasicInfo에서 계산
+        const monthlyRevenue = dbData?.income ?? (taxBasicInfo.expectedRevenue ? Math.floor(taxBasicInfo.expectedRevenue / 12) : 0);
+        const monthlyExp = dbData?.expense ?? (taxBasicInfo.expectedExpenses ? Math.floor(taxBasicInfo.expectedExpenses / 12) : 0);
+        const monthlyVat = dbData?.vat ?? (isQuarterMonth && businessTax ? Math.floor(businessTax.vat / 4) : 0);
 
         cumulativeTax += quarterlyTax;
         cumulativeNoDeduction += quarterlyTaxNoDeduction;
@@ -3130,8 +3154,8 @@ const ReceiptFinancePlatform = () => {
 
         return {
           month,
-          monthlyTax: isPast ? quarterlyTax : 0,
-          predictedTax: !isPast ? quarterlyTax : 0,
+          monthlyTax: isPast ? (dbData?.actual ?? quarterlyTax) : 0,
+          predictedTax: !isPast ? (dbData?.predicted ?? quarterlyTax) : 0,
           cumulativeTax: isPast ? cumulativeTax : null,
           predictedCumulative: cumulativeTax,
           noDeductionTax: quarterlyTaxNoDeduction,
@@ -3139,12 +3163,12 @@ const ReceiptFinancePlatform = () => {
           income: monthlyRevenue,
           expense: monthlyExp,
           cumulativeExpense,
-          vat: isQuarterMonth && businessTax ? Math.floor(businessTax.vat / 4) : 0,
+          vat: monthlyVat,
           isPast,
         };
       }
     });
-  }, [receipts, taxBasicInfo, userType]);
+  }, [receipts, taxBasicInfo, userType, businessTaxData]);
 
   const _TaxPredictionView = () => {
     // DB 데이터 대신 실제 계산된 데이터 사용
@@ -4678,6 +4702,10 @@ const ReceiptFinancePlatform = () => {
             setCalcMedical={setCalcMedical}
             setCalcEducation={setCalcEducation}
             handleDeductionCheck={handleDeductionCheck}
+            // 사업자 계산기 props
+            bizCalcState={bizCalcState}
+            handleBizCalcChange={handleBizCalcChange}
+            businessTaxData={businessTaxData}
           />
         )}
         {currentTab === 'benefits' && (

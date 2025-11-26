@@ -1,9 +1,102 @@
 # 세금 계산 로직 업데이트 (2024/2025 적용)
 
 - 작업 일자: 2025-11-25 (로컬 적용 기준)
-- 최종 수정: 2025-11-25 (신용카드 공제 로직 수정)
-- 파일: `src/services/taxCalculator.js`
+- 최종 수정: 2025-11-26 (리팩토링 + 법령 검증)
+- 파일: `src/services/taxCalculator.js`, `src/constants/businessTaxConstants.js`, `src/App.jsx`
 - 목적: 국세청 공시 기준에 맞춰 누진/한도/경감 규칙을 세분화
+
+---
+
+## 2025-11-26 업데이트 내역 (2차)
+
+### 1. 리팩토링: 일반과세 VAT 함수 분리
+- **변경**: 인라인 VAT 계산 로직을 서비스 함수로 분리
+- **파일**: `src/services/taxCalculator.js`
+- **신규 함수**: `calculateGeneralVAT()`
+
+```javascript
+export const calculateGeneralVAT = ({
+  annualSales = 0,
+  annualPurchases = 0,
+  industryCode = null,
+}) => {
+  const outputVat = Math.floor(annualSales * 0.1);  // 매출세액
+  const inputVat = Math.floor(annualPurchases * 0.1);  // 매입세액
+  const netVat = outputVat - inputVat;
+  return {
+    vatPayable: Math.max(0, netVat),
+    vatRefund: Math.max(0, -netVat),
+    // ...상세 breakdown 포함
+  };
+};
+```
+
+- **적용**: `TaxPredictionView.jsx`에서 간이/일반 분기 시 서비스 함수 호출
+
+### 2. 리팩토링: 사업자 계산기 초기값 상수화
+- **변경**: 하드코딩된 초기값을 상수 파일로 분리
+- **파일**: `src/constants/businessTaxConstants.js`
+- **신규 상수**: `BIZ_CALC_DEFAULTS`
+
+```javascript
+export const BIZ_CALC_DEFAULTS = {
+  defaults: {
+    annualSales: 80000000,       // 연매출 8천만
+    annualPurchases: 20000000,   // 연매입 2천만
+    cardSalesRatio: 80,          // 카드매출 80%
+    industryCode: 'restaurant',
+    isSimplified: true,
+    yellowUmbrellaContribution: 0,
+  },
+  annualSales: { min: 10000000, max: 200000000, step: 5000000 },
+  annualPurchases: { min: 0, max: 100000000, step: 1000000 },
+  // ...슬라이더 범위 및 툴팁 포함
+};
+```
+
+- **적용**: `App.jsx`에서 `useState({ ...BIZ_CALC_DEFAULTS.defaults })`로 사용
+
+### 3. 법령 검증 및 수정
+웹 공시자료와 코드 상수값 대조 검증 수행
+
+| 항목 | 코드값 | 법령/공시 | 결과 |
+|------|--------|----------|------|
+| 간이과세 기준 | 1억400만원/4800만원 | 부가세법 시행령 §109 | ✅ 일치 |
+| 업종별 부가가치율 | 15/20/25/30/40% | 부가세법 시행령 §111 | ✅ 일치 |
+| 카드매출 공제율 | 1.3%/0.65% | 부가세법 §46 | ✅ 일치 |
+| 노란우산 한도 | 600/400/200만원 | 조특법 §86조의3 | ✅ 일치 |
+| 창업감면율 | 청년100%/75%/50% | 조특법 §6 | ✅ 일치 |
+
+**수정 반영:**
+- `STARTUP_TAX_REDUCTION.annualLimit`: 연 5억원 추가 (2025년 귀속분부터)
+- `CARD_SALES_TAX_CREDIT.meta.note`: "기본 1%→2026년까지 1.3% 한시 상향" 명시
+
+---
+
+## 2025-11-26 업데이트 내역 (1차)
+
+### 1. 세금예측 차트 DB 연동 개선
+- **문제**: 사업자 현금흐름 차트가 영수증 합계를 지출로 사용하여 모든 월이 적자로 표시
+- **해결**: `business_tax_data` DB 데이터 우선 사용, 없으면 `taxBasicInfo` 계산값 폴백
+- **파일**: `src/App.jsx` (calculatedTaxData useMemo)
+
+```javascript
+// 사업자: DB 데이터 우선 사용
+const dbData = businessTaxData.find(d => d.month === month);
+const monthlyRevenue = dbData?.income ?? (taxBasicInfo.expectedRevenue / 12);
+const monthlyExp = dbData?.expense ?? (taxBasicInfo.expectedExpenses / 12);
+```
+
+### 2. UI 개선
+- **User Type Selector 위치 고정**: 세금예측 탭에서 항상 맨 위에 표시
+- **숫자 포맷 통일**: 대시보드 출석체크 카드 아래 "누적 절감" 금액에 천단위 쉼표 적용
+
+### 3. 소상공인 세금 상수 개선 (`businessTaxConstants.js`)
+- `currentRates` → `rates`, `futureRates` → `scheduledChanges` 메타 분리
+- 누락 업종 추가: 택배, 금융업, 사업서비스, 부동산서비스 (총 17개)
+- 인천 경제자유구역 분류 수정: `METROPOLITAN_NON_CROWDED` (청년 75%/일반 25%)
+- 인천 남동국가산업단지 추가
+- `scheduledChanges` 사용 가이드 주석 추가
 
 ---
 
@@ -94,3 +187,166 @@
 - 기부금: 소득 기준 상한만 적용하며, 종교/지정 구분과 인별 한도는 전달 필드에 의존.
 - 사업자 세부 규정: 업종별 부가가치율 테이블, 간이과세 전환/배제 구간(8천만·1.4억 등), 특별세액감면, 성실신고 확인비용, 농어촌특별세 등 추가 공제/감면은 미적용.
 - 실제 신고 시기는 연도별 해석 차이가 있을 수 있으므로 최신 국세청 고시와 비교 검증 권장.
+
+---
+
+## 소득세율표 (2025년 기준, 변동 없음)
+
+| 과세표준 | 세율 | 누진공제 |
+|----------|------|----------|
+| 1,400만원 이하 | 6% | 0원 |
+| 1,400만~5,000만원 | 15% | 126만원 |
+| 5,000만~8,800만원 | 24% | 576만원 |
+| 8,800만~1.5억원 | 35% | 1,544만원 |
+| 1.5억~3억원 | 38% | 1,994만원 |
+| 3억~5억원 | 40% | 2,594만원 |
+| 5억~10억원 | 42% | 3,594만원 |
+| 10억원 초과 | 45% | 6,594만원 |
+
+---
+
+## 근로소득공제율
+
+| 총급여 구간 | 공제율 | 기준 |
+|-------------|--------|------|
+| 500만원 이하 | 70% | - |
+| 500만~1,500만원 | 40% | 350만원 + (초과분×40%) |
+| 1,500만~4,500만원 | 15% | 750만원 + (초과분×15%) |
+| 4,500만~1억원 | 5% | 1,200만원 + (초과분×5%) |
+| 1억원 초과 | 2% | 1,475만원 + (초과분×2%) |
+
+> 근로소득공제 한도: **2,000만원**
+
+---
+
+## 혼인 세액공제 (2024~2026년 한정)
+
+| 항목 | 내용 |
+|------|------|
+| 대상 | 2024~2026년 혼인신고자 |
+| 공제액 | 본인 50만원 (부부 합산 최대 100만원) |
+| 조건 | 생애 1회 적용 |
+| 상태 | ⚠️ 세부 요건 미확정 (기본 로직만 구현) |
+
+---
+
+## Tax Health 점수 시스템 (4가지 세부 점수)
+
+### 1. 세금 리스크 점수 (Tax Risk Score)
+높을수록 안전함 (100점 만점)
+
+| 감점 요인 | 최대 감점 | 설명 |
+|-----------|-----------|------|
+| 증빙 누락 | -30점 | 50만원당 1개 증빙 필요, 부족 시 감점 |
+| 한도 초과 | -20점 | 공제 한도 초과 항목당 -10점 |
+| 소득 대비 이상치 | -15점 | 업종 평균 대비 50% 이상 차이 시 |
+| 미검증 거래 | -15점 | 미검증 거래 존재 시 |
+| 신고 마감 임박 | -10점 | 30일 이내 마감 & 증빙 미비 시 |
+
+**상태 판정**: 80↑ 안전 / 60↑ 주의 / 40↑ 경고 / 40↓ 위험
+
+### 2. 증빙 완성도 점수 (Documentation Score)
+
+| 항목 | 배점 | 기준 |
+|------|------|------|
+| 카테고리별 증빙 | 80점 | 필요 서류 대비 업로드 비율 |
+| 기본 서류 | 10점 | 소득증빙, 신분증 보유 시 |
+| 영수증 OCR 검증 | 10점 | 검증된 영수증 비율 |
+
+**상태 판정**: 80↑ 우수 / 60↑ 양호 / 40↑ 보통 / 40↓ 미흡
+
+### 3. 환급 가능성 점수 (Refund Potential Score)
+
+| 항목 | 배점 | 기준 |
+|------|------|------|
+| 환급 예상액 | 50점 | 기납부세액 대비 환급 비율 |
+| 공제 활용도 | 30점 | 한도 대비 실제 공제 활용률 |
+| 증빙 완성도 | 20점 | 업로드된 증빙 개수 |
+
+### 4. 절세 여력 점수 (Savings Potential Score)
+높을수록 절세 기회 많음
+
+- 아직 사용하지 않은 공제 한도 기반
+- 소득 구간별 한계세율 적용하여 예상 절세액 산출
+- 저소득자(5,500만원↓)는 10% 보너스
+
+**상태 판정**: 70↑ 여력 많음 / 40↑ 보통 / 40↓ 한도 근접
+
+### 업종별 표준 지표 (국세청 기준 참고)
+
+| 유형 | 평균 공제율 | 평균 증빙율 | 권장 카테고리 |
+|------|-------------|-------------|---------------|
+| 개인 근로소득자 | 15% | 70% | 5개 |
+| 프리랜서 | 25% | 60% | 4개 |
+| 일반 사업자 | 30% | 80% | 4개 |
+
+---
+
+## 구현 함수 목록 (export)
+
+### 핵심 계산 함수
+| 함수명 | 설명 |
+|--------|------|
+| `calculateIndividualTax` | 개인 연말정산 종합 계산 |
+| `calculateBusinessTax` | 사업자 종합소득세 계산 |
+| `calculateVAT` | 부가가치세 계산 (일반/간이) |
+| `predictMonthlyTax` | 월별 세금 예측 (간이) |
+| `calculatePotentialSavings` | 예상 절감액 계산 |
+
+### 공제 계산 함수
+| 함수명 | 설명 |
+|--------|------|
+| `calculateEarnedIncomeDeduction` | 근로소득공제 |
+| `calculateMedicalDeduction` | 의료비 공제 (난임 지원) |
+| `calculateEducationDeduction` | 교육비 공제 |
+| `calculateDonationDeduction` | 기부금 공제 |
+| `calculatePensionDeduction` | 연금저축/IRP 공제 |
+| `calculateChildTaxCredit` | 자녀 세액공제 |
+| `calculateCreditCardDeduction` | 신용카드 소득공제 (3중 한도) |
+| `calculateRentTaxCredit` | 월세 세액공제 |
+| `calculateMarriageCredit` | 혼인 세액공제 |
+
+### 4대보험 함수
+| 함수명 | 설명 |
+|--------|------|
+| `calculateInsurancePremiums` | 월별 4대보험료 (상·하한 적용) |
+| `calculateAnnualInsurancePremiums` | 연간 4대보험료 합계 |
+
+### Tax Health 점수 함수
+| 함수명 | 설명 |
+|--------|------|
+| `calculateTaxRiskScore` | 세금 리스크 점수 |
+| `calculateDocumentationScore` | 증빙 완성도 점수 |
+| `calculateRefundPotentialScore` | 환급 가능성 점수 |
+| `calculateSavingsPotentialScore` | 절세 여력 점수 |
+| `calculateDetailedTaxHealthScores` | 4가지 점수 통합 계산 |
+| `calculateTaxHealthScore` | 간단 건강 점수 (0-100) |
+
+### 소상공인/사업자 세금 함수 (2025-11-26 신규/갱신)
+| 함수명 | 설명 |
+|--------|------|
+| `calculateYellowUmbrellaDeduction` | 노란우산공제 소득공제 계산 |
+| `calculateCardSalesTaxCredit` | 신용카드 매출 세액공제 계산 |
+| `calculateSimplifiedVAT` | 간이과세자 부가세 계산 (업종별) |
+| `calculateGeneralVAT` | **일반과세자 부가세 계산** (신규) |
+| `getIndustryList` | 업종 목록 조회 (UI 드롭다운용) |
+
+---
+
+## 소상공인 세금 상수 파일
+
+**파일**: `src/constants/businessTaxConstants.js`
+
+### 포함 상수
+| 상수명 | 설명 |
+|--------|------|
+| `YELLOW_UMBRELLA_DEDUCTION` | 노란우산공제 (소득구간별 한도, 납입한도, 가입자격) |
+| `INDUSTRY_VALUE_ADDED_RATES` | 업종별 부가가치율 (17개 업종) |
+| `SIMPLIFIED_TAX_CRITERIA` | 간이과세 기준 (1억 400만원, 경감 50%) |
+| `CARD_SALES_TAX_CREDIT` | 신용카드 매출 세액공제 (1.3%/0.65%, 한도 1천만) |
+| `SME_SPECIAL_TAX_REDUCTION` | 중소기업 특별세액감면 |
+| `STARTUP_TAX_REDUCTION` | 창업중소기업 세액감면 |
+| `SINCERE_FILING_COST_CREDIT` | 성실신고 확인비용 세액공제 |
+| `REGION_TYPES` / `REGION_LIST` | 지역 구분 (과밀억제권역/비수도권/인구감소지역) |
+| `BUSINESS_DEDUCTION_CHECKLIST` | 사업자 공제 체크리스트 (UI용) |
+| `BIZ_CALC_DEFAULTS` | **사업자 계산기 초기값/범위** (신규) |
