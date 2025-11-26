@@ -253,9 +253,10 @@ export const calculateMedicalDeduction = (
   const infertilityDeductible = Math.min(deductibleBase, infertilityAmount);
   const generalDeductible = Math.max(0, deductibleBase - infertilityDeductible);
 
-  const generalCredit = Math.min(
-    Math.floor(generalDeductible * SPECIAL_DEDUCTION_LIMITS.medical.rate),
-    SPECIAL_DEDUCTION_LIMITS.medical.limit,
+  // 공제대상 의료비를 700만원까지로 제한한 뒤 15% 적용 (세액공제 상한 105만원)
+  const generalCredit = Math.floor(
+    Math.min(generalDeductible, SPECIAL_DEDUCTION_LIMITS.medical.limit) *
+      SPECIAL_DEDUCTION_LIMITS.medical.rate,
   );
 
   const infertilityCredit = hasInfertility
@@ -418,7 +419,8 @@ export const calculateIndividualTax = ({
   );
   const infertilityAmount = Math.min(Math.max(0, medicalInfertility || 0), totalMedicalExpenses);
   const hasInfertilityExpense = hasInfertility || infertilityAmount > 0;
-  const eligibleChildDependents = Math.max(0, childDependents || dependents || 0);
+  // 자녀 수는 명시적으로 입력된 값만 사용 (부양가족 전체를 자녀로 간주하지 않음)
+  const eligibleChildDependents = Math.max(0, childDependents || 0);
 
   // 5. 과세표준
   const taxableIncome = Math.max(
@@ -1445,9 +1447,16 @@ export const calculateRentTaxCredit = ({
     conditions.reasons.push(`총급여 ${(maxIncome / 10000).toLocaleString()}만원 초과`);
   }
 
-  if (housingSize > 85 && housingPrice > 400000000) {
+  // 국민주택규모 초과 또는 기준시가 4억원 초과 중 하나라도 해당하면 탈락
+  if (housingSize > 85 || housingPrice > 400000000) {
     conditions.isEligible = false;
-    conditions.reasons.push('국민주택규모(85㎡) 또는 기준시가 4억원 초과');
+    conditions.reasons.push(
+      housingSize > 85 && housingPrice > 400000000
+        ? '국민주택규모(85㎡) 및 기준시가 4억원 초과'
+        : housingSize > 85
+          ? '국민주택규모(85㎡) 초과'
+          : '기준시가 4억원 초과',
+    );
   }
 
   if (!conditions.isEligible) {
