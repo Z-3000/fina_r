@@ -51,23 +51,43 @@
 fina_r/
 ├── src/
 │   ├── App.jsx              # 메인 애플리케이션 컴포넌트
-│   ├── main.jsx             # 엔트리 포인트
+│   ├── main.jsx             # 엔트리 포인트 (ToastProvider 포함)
+│   ├── index.css            # 전역 스타일
+│   ├── components/
+│   │   ├── views/           # View 컴포넌트
+│   │   │   ├── DashboardView.jsx
+│   │   │   ├── BudgetView.jsx
+│   │   │   ├── TaxPredictionView.jsx
+│   │   │   ├── ReceiptsView.jsx
+│   │   │   ├── BenefitsView.jsx
+│   │   │   └── ChallengesView.jsx
+│   │   └── common/
+│   │       └── ToastContainer.jsx  # Toast UI
+│   ├── context/
+│   │   ├── ToastContext.jsx   # Toast 상태 관리
+│   │   └── AuthContext.jsx    # 인증 Context
+│   ├── hooks/
+│   │   ├── useAuth.js         # 인증 로직 훅
+│   │   └── useChallengesData.js # Challenges 지연 로드
+│   ├── utils/
+│   │   └── apiWrapper.js      # API 래퍼 유틸리티
+│   ├── constants/
+│   │   └── colors.js          # 색상 시스템
 │   ├── lib/
-│   │   └── supabase.js      # Supabase 클라이언트 설정
+│   │   └── supabase.js        # Supabase 클라이언트 설정
 │   └── services/
-│       ├── supabaseApi.js   # Supabase API 서비스
-│       ├── taxCalculator.js # 세금 계산 로직
-│       ├── ocrService.js    # OCR 영수증 처리
-│       ├── exportService.js # PDF/Excel 내보내기
-│       └── api.js           # 기타 API 서비스
-├── supabase/                # Supabase 설정/마이그레이션
-├── public/                  # 정적 파일
-├── dist/                    # 빌드 출력
+│       ├── supabaseApi.js     # Supabase API 서비스
+│       ├── taxCalculator.js   # 세금 계산 로직
+│       ├── ocrService.js      # OCR 영수증 처리
+│       └── exportService.jsx  # PDF/Excel 내보내기
+├── supabase/                  # Supabase 설정/마이그레이션
+├── public/                    # 정적 파일
+├── dist/                      # 빌드 출력
 ├── package.json
 ├── vite.config.js
 ├── tailwind.config.js
 ├── postcss.config.js
-└── vercel.json              # Vercel 배포 설정
+└── vercel.json                # Vercel 배포 설정
 ```
 
 ---
@@ -320,7 +340,10 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 - [ ] TypeScript 마이그레이션
 - [ ] 테스트 코드 작성 (Jest, Cypress)
 - [ ] 상태 관리 라이브러리 도입 (Zustand/Redux)
-- [ ] 컴포넌트 분리 및 모듈화
+- [x] 컴포넌트 분리 및 모듈화 (v3.6 View 분리, v3.7 훅 분리)
+- [x] Toast 에러 알림 시스템 (v3.7)
+- [x] Custom Hooks 도입 (useAuth, useChallengesData)
+- [ ] supabaseApi.js 도메인별 분리 (선택적)
 
 ### 보안 강화
 - [ ] 민감 정보 암호화

@@ -1,7 +1,7 @@
 # FINA_R 개발 로드맵
 
 > 개인/소상공인을 위한 스마트 세금 관리 앱
-> 최종 업데이트: 2025-11-26 v3.6 (컴포넌트 리팩토링 및 차트 개선)
+> 최종 업데이트: 2025-11-26 v3.8 (AI 공제 추천 규칙 기반 인사이트)
 
 ---
 
@@ -188,23 +188,44 @@ npm install file-saver      # ✅ 파일 다운로드 처리
 ```
 fina_r/
 ├── src/
-│   ├── components/         # UI 컴포넌트
+│   ├── components/
+│   │   ├── views/           # ✅ View 컴포넌트 (v3.6)
+│   │   │   ├── DashboardView.jsx
+│   │   │   ├── BudgetView.jsx
+│   │   │   ├── TaxPredictionView.jsx
+│   │   │   ├── ReceiptsView.jsx
+│   │   │   ├── BenefitsView.jsx
+│   │   │   └── ChallengesView.jsx
+│   │   └── common/
+│   │       └── ToastContainer.jsx  # 🆕 Toast UI (v3.7)
+│   ├── context/
+│   │   ├── ToastContext.jsx   # 🆕 Toast 상태관리 (v3.7)
+│   │   └── AuthContext.jsx    # 🆕 인증 Context (v3.7)
+│   ├── hooks/
+│   │   ├── useAuth.js         # 🆕 인증 훅 (v3.7)
+│   │   └── useChallengesData.js # 🆕 Challenges 지연 로드 (v3.7)
+│   ├── utils/
+│   │   └── apiWrapper.js      # 🆕 API 래퍼 (v3.7)
+│   ├── constants/
+│   │   └── colors.js          # ✅ 색상 시스템 (v3.4)
 │   ├── lib/
-│   │   └── supabase.js     # ✅ Supabase 클라이언트
+│   │   └── supabase.js        # ✅ Supabase 클라이언트
 │   ├── services/
-│   │   ├── supabaseApi.js  # ✅ API 서비스 (18개 모듈)
-│   │   ├── ocrService.js   # ✅ OCR 서비스 (Tesseract.js)
-│   │   ├── taxCalculator.js # ✅ 세금 계산기
-│   │   └── exportService.jsx # ✅ PDF/Excel 내보내기 (jsPDF + xlsx)
-│   ├── App.jsx             # ✅ 메인 앱 (연말정산 시뮬레이터 포함)
-│   └── main.jsx
+│   │   ├── supabaseApi.js     # ✅ API 서비스 (18개 모듈)
+│   │   ├── ocrService.js      # ✅ OCR 서비스 (Tesseract.js)
+│   │   ├── taxCalculator.js   # ✅ 세금 계산기
+│   │   ├── exportService.jsx  # ✅ PDF/Excel 내보내기
+│   │   └── insightGenerator.js # 🆕 규칙 기반 인사이트 (v3.8)
+│   ├── App.jsx                # ✅ 메인 앱
+│   ├── main.jsx               # ✅ 엔트리 (ToastProvider 포함)
+│   └── index.css              # ✅ 전역 스타일
 ├── supabase/
-│   ├── schema.sql          # ✅ 기본 DB 스키마
+│   ├── schema.sql             # ✅ 기본 DB 스키마
 │   ├── migrations/
-│   │   ├── 001_additional_tables.sql  # ✅ 추가 테이블 (11개)
-│   │   └── 002_bank_dummy_transactions.sql  # ✅ 금융사별 더미 거래내역
-│   └── seed.sql            # ✅ 시드 데이터
-├── .env                    # ✅ 환경변수
+│   │   ├── 001_additional_tables.sql
+│   │   └── 002_bank_dummy_transactions.sql
+│   └── seed.sql               # ✅ 시드 데이터
+├── .env                       # ✅ 환경변수
 └── package.json
 ```
 
@@ -321,11 +342,224 @@ VITE_KAKAO_REST_KEY=your_kakao_rest_key
 | 2025-11-25 | 3.3 | Tax Health Score 세부 점수 로직 개선 - 캐시노트 방식 참고하여 규칙 기반 산출 (세금 리스크, 증빙 완성도, 환급 가능성, 절세 여력) |
 | 2025-11-25 | 3.4 | 디자인 시스템 색상 업데이트 - Flat Design 팔레트 적용 (Dark Amethyst, Neon Ice, Gold, Spring Green) |
 | 2025-11-25 | 3.5 | 세금예측 실제 로직 연동 및 UI 개선 - 세금예측 탭 실제 계산 로직 연동, 사업 현금흐름 차트 개선, 금액 오른쪽 정렬 통일 |
-| 2025-11-26 | **3.6** | **컴포넌트 리팩토링 및 차트 개선** - View 컴포넌트 분리, 원형차트 10% 미만 기타 처리, 세금예측 누적 라인차트, 월별 지출 추이 DB 연동 |
+| 2025-11-26 | 3.6 | 컴포넌트 리팩토링 및 차트 개선 - View 컴포넌트 분리, 원형차트 10% 미만 기타 처리, 세금예측 누적 라인차트, 월별 지출 추이 DB 연동 |
+| 2025-11-26 | 3.7 | 코드 구조 리팩토링 및 안정화 - Toast 에러 알림 인프라, useAuth 훅 분리, Challenges 지연 로드, 무한 루프 버그 수정, API 호출 최적화 (18→16개) |
+| 2025-11-26 | **3.8** | **AI 공제 추천 규칙 기반 인사이트** - insightGenerator.js 연동, DB+규칙 기반 인사이트 병합, 6가지 공제 분석 규칙 |
 
 ---
 
-## 컴포넌트 리팩토링 및 차트 개선 (2025-11-26) 🆕
+## AI 공제 추천 규칙 기반 인사이트 (2025-11-26) 🆕
+
+### 배경
+OpenAI API 없이도 즉시 동작하는 규칙 기반 AI 공제 추천 시스템을 구현했습니다. 사용자의 공제 현황, 지출 패턴, 예산 데이터를 분석하여 맞춤형 절세 인사이트를 제공합니다.
+
+### 신규 파일
+
+| 파일 | 용도 | 크기 |
+|------|------|------|
+| `src/services/insightGenerator.js` | 규칙 기반 인사이트 생성기 | 317줄 |
+
+### 인사이트 타입
+
+| 타입 | 용도 | 예시 |
+|------|------|------|
+| `critical` | 긴급 (마감 임박) | 연말정산 D-30 |
+| `opportunity` | 절세 기회 | 체크카드 전환 권장 |
+| `warning` | 주의 필요 | 예산 초과 |
+| `achievement` | 달성/긍정적 | 의료비 공제 대상 |
+| `info` | 정보성 | 의료비 공제 기준 안내 |
+
+### 공제 분석 규칙 (6가지)
+
+#### 1. 신용카드 vs 체크카드 분석
+```
+조건: 신용카드 사용액 > 총급여 25%
+결과: 체크카드 전환 권장 + 예상 추가 공제액 계산
+```
+
+#### 2. 의료비 공제 분석
+```
+기준: 총급여 3% 초과분부터 공제 적용
+결과: 공제 가능 여부 + 예상 절세액
+```
+
+#### 3. 교육비 공제 분석
+```
+조건: 한도 대비 50% 미만 사용 + 남은 기간 2개월 이상
+결과: 자격증/어학 강의 수강 권장
+```
+
+#### 4. 연금저축 분석
+```
+조건: 한도(400만원) 대비 80% 미만 사용
+결과: 추가 납입 권장 + 세액공제 예상액
+```
+
+#### 5. 기부금 분석
+```
+조건: 기부금 납입 내역 존재
+결과: 세액공제 대상 안내
+```
+
+#### 6. 연말 마감 임박 경고
+```
+조건: 11월 이후 + 마감 45일 이내 + 미사용 공제 항목 존재
+결과: D-day 경고 + 미사용 항목 안내
+```
+
+### 지출 패턴 분석
+
+| 조건 | 결과 |
+|------|------|
+| 예산 120% 초과 | 경고: 지출 관리 필요 |
+| 월말 + 예산 50% 미만 사용 | 성공: 절약 축하 |
+
+### App.jsx 연동
+
+```javascript
+// DB 인사이트 + 규칙 기반 인사이트 병합
+const dbInsights = aiInsightsData.map(insight => ({ ...insight, source: 'db' }));
+const ruleBasedInsights = generateAllInsights(deductionObj, receipts, budgets, annualIncome, userType);
+
+// 중복 제거 (같은 카테고리 DB 인사이트 우선)
+const combinedInsights = [...dbInsights, ...filteredRuleInsights];
+setAiInsights(combinedInsights);
+```
+
+### 수정된 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `src/services/insightGenerator.js` | 🆕 규칙 기반 인사이트 생성기 |
+| `src/App.jsx` | insightGenerator import, 인사이트 병합 로직 |
+
+---
+
+## 코드 구조 리팩토링 및 안정화 (2025-11-26)
+
+### 배경
+코드 리뷰 피드백을 반영하여 App.jsx의 구조 개선 및 에러 처리 안정화를 진행했습니다.
+
+### 주요 개선 사항
+
+#### 1. Toast 에러 알림 인프라 구축
+
+| 파일 | 용도 |
+|------|------|
+| `src/context/ToastContext.jsx` | Toast 상태 관리 Context |
+| `src/components/common/ToastContainer.jsx` | Toast UI 컴포넌트 |
+
+**기능:**
+- 4가지 타입 지원: success, error, warning, info
+- 동일 메시지 중복 방지
+- 자동 dismiss (4초)
+- 프로젝트 색상 시스템 적용
+
+#### 2. 에러 핸들링 개선
+
+**변경 전:**
+```javascript
+// 에러를 삼키고 빈 배열 반환 - 사용자에게 알림 없음
+receiptsAPI.getAll(uid).catch(() => [])
+```
+
+**변경 후:**
+```javascript
+// 실패한 API 수집 후 toast로 알림
+const failedApis = [];
+const withErrorHandling = (promise, name, fallback = []) =>
+  promise.catch((error) => {
+    failedApis.push(name);
+    return fallback;
+  });
+
+// 결과: toast.warning('일부 데이터 로드 실패: 영수증, 예산')
+```
+
+#### 3. useAuth 훅 분리
+
+**새 파일:** `src/hooks/useAuth.js`
+
+| 기능 | 설명 |
+|------|------|
+| 세션 관리 | 초기 세션 체크 + 실시간 상태 변화 구독 |
+| 이메일 인증 | 로그인/회원가입 폼 상태 및 핸들러 |
+| 카카오 OAuth | 소셜 로그인 지원 |
+| 로그아웃 | 세션 종료 처리 |
+
+**효과:** App.jsx에서 인증 관련 코드 ~100줄 분리
+
+#### 4. Challenges 탭 지연 로드
+
+**새 파일:** `src/hooks/useChallengesData.js`
+
+| 기능 | 설명 |
+|------|------|
+| 지연 로드 | 탭 선택 시에만 API 호출 |
+| 캐싱 | useRef로 재로드 방지 |
+| 에러 처리 | 로딩/에러 상태 + 재시도 버튼 |
+
+**효과:** 초기 로드 시 API 5개 감소 (challenges, completedChallenges, weeklyMissions, leaderboard, rewards)
+
+#### 5. 무한 루프 버그 수정
+
+**문제:** 로그인 시 무한 새로고침 발생
+
+**원인:**
+- useAuth의 useEffect 의존성 배열에 인라인 콜백 함수 포함
+- 매 렌더마다 새 함수 참조 생성 → useEffect 무한 재실행
+
+**해결:**
+```javascript
+// useAuth.js - ref로 콜백 저장
+const onAuthSuccessRef = useRef(onAuthSuccess);
+useEffect(() => {
+  onAuthSuccessRef.current = onAuthSuccess;
+});
+
+// useEffect에서 ref 사용 (의존성 제거)
+useEffect(() => {
+  onAuthSuccessRef.current?.(session.user);
+}, []); // 빈 배열
+```
+
+**추가 수정:**
+- App.jsx에 `isDataLoadedRef`, `loadingUserIdRef` 추가하여 중복 API 호출 방지
+- useEffect 의존성 단순화 (`[currentUser?.id]`)
+
+#### 6. 불필요한 API 호출 제거
+
+**제거된 API:** `budgetsAPI.getMonthlySpendingTrend(uid)`
+
+**이유:** `monthlySpendingData`가 이미 로드된 `receipts`와 `budgets`에서 useMemo로 계산하므로 중복
+
+**효과:** API 호출 17개 → 16개
+
+### 신규/수정 파일 요약
+
+| 파일 | 상태 | 설명 |
+|------|:----:|------|
+| `src/context/ToastContext.jsx` | 🆕 | Toast 상태 관리 |
+| `src/components/common/ToastContainer.jsx` | 🆕 | Toast UI |
+| `src/hooks/useAuth.js` | 🆕 | 인증 로직 훅 |
+| `src/hooks/useChallengesData.js` | 🆕 | Challenges 지연 로드 훅 |
+| `src/context/AuthContext.jsx` | 🆕 | 인증 Context (선택적 사용) |
+| `src/utils/apiWrapper.js` | 🆕 | API 래퍼 유틸리티 |
+| `src/App.jsx` | ✏️ | 훅 적용, 에러 핸들링 개선 |
+| `src/main.jsx` | ✏️ | ToastProvider 추가 |
+| `src/index.css` | ✏️ | Toast 애니메이션 추가 |
+
+### API 호출 최적화 결과
+
+| 단계 | API 호출 수 | 설명 |
+|------|:-----------:|------|
+| 리팩토링 전 | 23개 | 모든 API 초기 로드 |
+| Challenges 지연 로드 | 18개 | -5개 (탭 선택 시 로드) |
+| 지출추이 API 제거 | 16개 | -2개 (useMemo로 대체) |
+
+---
+
+## 컴포넌트 리팩토링 및 차트 개선 (2025-11-26)
 
 ### View 컴포넌트 분리
 
@@ -746,4 +980,4 @@ SELECT seed_user_data('49d3468c-f19d-4d4e-84fe-c37fbab4be6b');
 
 ---
 
-*Generated by Claude Code - 2025-11-25 (v3.5)*
+*Generated by Claude Code - 2025-11-26 (v3.8)*

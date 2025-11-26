@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Camera, Upload, Wallet, TrendingUp, TrendingDown, PieChart, FileText, Users, CreditCard, Calculator, Award, ChevronRight, Plus, X, Check, AlertCircle, Sparkles, Calendar, DollarSign, Building, Bell, Target, Trophy, MessageCircle, ThumbsUp, Send, Zap, Crown, Star, Shield, Gift, ArrowUp, ArrowDown, Activity, Clock, CheckCircle, Briefcase, User, Flame, Repeat, Lock, Unlock, PartyPopper, Ticket, Coffee, ShoppingBag, Link, RefreshCw, CheckCircle2, Timer, BarChart3, Eye, EyeOff, Download, FileCheck, Folder, Search, Filter, TrendingUpIcon, AlertTriangle, Lightbulb, Receipt, Heart, GraduationCap, Home, Car, Baby, Pill, BookOpen, Laptop, Waves, LogIn, UserPlus, Key } from 'lucide-react';
 import { PieChart as RechartsPie, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, RadialBarChart, RadialBar, ComposedChart, ReferenceLine } from 'recharts';
-import { supabase, onAuthStateChange } from './lib/supabase';
+import { supabase } from './lib/supabase';
 import './App.css';
 import {
   authAPI,
@@ -48,6 +48,7 @@ import {
   exportTaxDataToExcel,
   exportAllDataToExcel,
 } from './services/exportService';
+import { generateAllInsights } from './services/insightGenerator';
 
 // ===== Color System (from constants/colors.js) =====
 import {
@@ -87,6 +88,13 @@ import TaxPredictionView from './components/views/TaxPredictionView';
 import BenefitsView from './components/views/BenefitsView';
 import ChallengesView from './components/views/ChallengesView';
 
+// ===== Toast =====
+import { useToast } from './context/ToastContext';
+
+// ===== Custom Hooks =====
+import { useChallengesData } from './hooks/useChallengesData';
+import { useAuth } from './hooks/useAuth';
+
 // ===== 숫자 입력 유틸리티 함수 =====
 // Focus 시 0이면 빈 문자열로 (입력 편의)
 const handleNumberFocus = (e) => {
@@ -120,9 +128,14 @@ const CHART_COLORS = {
 };
 
 const ReceiptFinancePlatform = () => {
+  // Toast hook for error notifications
+  const toast = useToast();
+
   // Loading state for API calls
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
+  const isDataLoadedRef = useRef(false); // 데이터 로드 완료 여부 (중복 호출 방지)
+  const loadingUserIdRef = useRef(null); // 현재 로딩 중인 사용자 ID
   const [isScrolled, setIsScrolled] = useState(false); // 스크롤 상태 관리
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -178,13 +191,45 @@ const ReceiptFinancePlatform = () => {
   });
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-  const [isAuthenticated, setIsAuthenticated] = useState(false); // 인증 상태
-  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
-  const [currentUser, setCurrentUser] = useState(null); // Supabase 사용자
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authName, setAuthName] = useState('');
-  const [authError, setAuthError] = useState('');
+
+  // Auth 훅 - 인증 상태 및 로그인/로그아웃 관리
+  const auth = useAuth({
+    onAuthSuccess: (user) => {
+      loadUserProfile(user.id);
+      setShowAuthModal(false);
+    },
+    onLogout: () => {
+      // 데이터 캐시 초기화
+      isDataLoadedRef.current = false;
+      loadingUserIdRef.current = null;
+      challengesData.reset();
+    },
+  });
+
+  // 기존 코드 호환을 위한 destructuring
+  const {
+    isAuthenticated,
+    currentUser,
+    authMode,
+    setAuthMode,
+    authEmail,
+    setAuthEmail,
+    authPassword,
+    setAuthPassword,
+    authName,
+    setAuthName,
+    authError,
+    setAuthError,
+    isSubmitting: authIsSubmitting,
+    handleEmailLogin,
+    handleEmailSignup,
+    handleKakaoLogin,
+    handleLogout,
+  } = auth;
+
+  // Challenges 탭 지연 로드 훅
+  const challengesData = useChallengesData(currentUser?.id);
+
   const activeTheme = TAB_THEMES[currentTab] || TAB_THEMES.dashboard;
   const themeStyle = {
     '--theme-primary': activeTheme.primary,
@@ -203,34 +248,7 @@ const ReceiptFinancePlatform = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Supabase 인증 상태 감시
-  useEffect(() => {
-    // 현재 세션 확인
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setCurrentUser(session.user);
-        setIsAuthenticated(true);
-        loadUserProfile(session.user.id);
-      }
-    });
-
-    // 인증 상태 변화 리스너
-    const { data: { subscription } } = onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        setCurrentUser(session.user);
-        setIsAuthenticated(true);
-        loadUserProfile(session.user.id);
-        setShowAuthModal(false);
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-        setIsAuthenticated(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // 사용자 프로필 로드
+  // 사용자 프로필 로드 (useAuth onAuthSuccess 콜백에서 호출)
   const loadUserProfile = async (userId) => {
     try {
       const profile = await authAPI.getProfile(userId);
@@ -290,56 +308,7 @@ const ReceiptFinancePlatform = () => {
     }
   };
 
-  // 이메일 로그인
-  const handleEmailLogin = async () => {
-    setAuthError('');
-    setIsLoading(true);
-    try {
-      await authAPI.signIn(authEmail, authPassword);
-      setAuthEmail('');
-      setAuthPassword('');
-    } catch (error) {
-      setAuthError(error.message || '로그인에 실패했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 이메일 회원가입
-  const handleEmailSignup = async () => {
-    setAuthError('');
-    setIsLoading(true);
-    try {
-      await authAPI.signUp(authEmail, authPassword, authName);
-      setAuthError('가입 확인 이메일을 확인해주세요.');
-      setAuthEmail('');
-      setAuthPassword('');
-      setAuthName('');
-    } catch (error) {
-      setAuthError(error.message || '회원가입에 실패했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 카카오 로그인
-  const handleKakaoLogin = async () => {
-    setAuthError('');
-    try {
-      await authAPI.signInWithKakao();
-    } catch (error) {
-      setAuthError(error.message || '카카오 로그인에 실패했습니다.');
-    }
-  };
-
-  // 로그아웃
-  const handleLogout = async () => {
-    try {
-      await authAPI.signOut();
-    } catch (error) {
-      console.error('로그아웃 실패:', error);
-    }
-  };
+  // 로그인/회원가입/로그아웃 함수는 useAuth 훅에서 제공 (handleEmailLogin, handleEmailSignup, handleKakaoLogin, handleLogout)
 
   // Tax Health Score
   const [taxHealthScore, setTaxHealthScore] = useState(50);
@@ -398,7 +367,7 @@ const ReceiptFinancePlatform = () => {
   const [challenges, setChallenges] = useState([]);
   const [completedChallenges, setCompletedChallenges] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
-  const [monthlySpendingTrendData, setMonthlySpendingTrendData] = useState([]);
+  // monthlySpendingTrendData 제거 - receipts/budgets에서 useMemo로 계산
   const [notifications, setNotifications] = useState([]);
 
   // Community, Receipts, Budgets - API에서 로드
@@ -438,26 +407,43 @@ const ReceiptFinancePlatform = () => {
     }
 
     const uid = userId || currentUser.id;
+
+    // 이미 같은 사용자 데이터 로드 완료면 스킵
+    if (isDataLoadedRef.current && loadingUserIdRef.current === uid) {
+      console.log('🔄 데이터 이미 로드됨, 스킵 - User ID:', uid);
+      return;
+    }
+
+    // 다른 사용자면 ref 초기화
+    if (loadingUserIdRef.current !== uid) {
+      isDataLoadedRef.current = false;
+    }
+
+    loadingUserIdRef.current = uid;
     console.log('🔄 API 로드 시작 - User ID:', uid);
     setIsLoading(true);
     setApiError(null);
+
+    // 에러 발생 시 toast 알림 + fallback 반환 헬퍼
+    const failedApis = [];
+    const withErrorHandling = (promise, name, fallback = []) =>
+      promise.catch((error) => {
+        console.error(`[${name}] 로드 실패:`, error);
+        failedApis.push(name);
+        return fallback;
+      });
 
     try {
       const currentMonth = new Date().toISOString().slice(0, 7); // "2025-11"
       const currentYear = new Date().getFullYear();
 
-      // 병렬로 API 호출
+      // 병렬로 API 호출 (challenges 관련은 탭 선택 시 지연 로드)
       const [
         receiptsData,
         autoTransactionsData,
         linkedAccountsData,
         budgetsData,
-        challengesData,
-        completedChallengesData,
         dailyMissionsData,
-        weeklyMissionsData,
-        leaderboardData,
-        rewardsData,
         eventsData,
         aiInsightsData,
         notificationCenterData,
@@ -470,32 +456,35 @@ const ReceiptFinancePlatform = () => {
         communityPostsData,
         taxExpertsData,
         financialProductsData,
-        monthlySpendingTrendResult,
+        // monthlySpendingTrend는 receipts/budgets에서 계산하므로 API 호출 불필요
       ] = await Promise.all([
-        receiptsAPI.getAll(uid).catch(() => []),
-        autoTransactionsAPI.getAll(uid).catch(() => []),
-        accountsAPI.getLinkedAccounts(uid).catch(() => []),
-        budgetsAPI.getAll(uid, currentMonth).catch(() => []),
-        challengesAPI.getAll().catch(() => []),
-        gamificationAPI.getCompletedChallenges(uid).catch(() => []),
-        missionsAPI.getDailyMissions().catch(() => []),
-        missionsAPI.getWeeklyMissions().catch(() => []),
-        leaderboardAPI.getTopRanks(10).catch(() => []),
-        rewardsProductAPI.getAll().catch(() => []),
-        eventsAPI.getAll().catch(() => []),
-        insightsAPI.getAll(uid).catch(() => []),
-        notificationCenterAPI.getAll(uid).catch(() => []),
-        notificationsAPI.getAll(uid).catch(() => []),
-        deductionAPI.getAll(uid, currentYear).catch(() => []),
-        documentFoldersAPI.getAll(uid).catch(() => { }),
-        taxAPI.getIndividualTax(uid, currentYear).catch(() => []),
-        taxAPI.getBusinessTax(uid, currentYear).catch(() => []),
-        banksAPI.getAll().catch(() => []),
-        communityAPI.getPosts().catch(() => []),
-        expertsAPI.getAll().catch(() => []),
-        productsAPI.getAll().catch(() => []),
-        budgetsAPI.getMonthlySpendingTrend(uid).catch(() => []),
+        withErrorHandling(receiptsAPI.getAll(uid), '영수증'),
+        withErrorHandling(autoTransactionsAPI.getAll(uid), '자동거래'),
+        withErrorHandling(accountsAPI.getLinkedAccounts(uid), '연결계좌'),
+        withErrorHandling(budgetsAPI.getAll(uid, currentMonth), '예산'),
+        withErrorHandling(missionsAPI.getDailyMissions(), '일일미션'),
+        withErrorHandling(eventsAPI.getAll(), '이벤트'),
+        withErrorHandling(insightsAPI.getAll(uid), 'AI인사이트'),
+        withErrorHandling(notificationCenterAPI.getAll(uid), '알림센터'),
+        withErrorHandling(notificationsAPI.getAll(uid), '알림'),
+        withErrorHandling(deductionAPI.getAll(uid, currentYear), '공제추적'),
+        withErrorHandling(documentFoldersAPI.getAll(uid), '문서폴더', {}),
+        withErrorHandling(taxAPI.getIndividualTax(uid, currentYear), '개인세금'),
+        withErrorHandling(taxAPI.getBusinessTax(uid, currentYear), '사업세금'),
+        withErrorHandling(banksAPI.getAll(), '은행목록'),
+        withErrorHandling(communityAPI.getPosts(), '커뮤니티'),
+        withErrorHandling(expertsAPI.getAll(), '전문가'),
+        withErrorHandling(productsAPI.getAll(), '금융상품'),
       ]);
+
+      // 실패한 API가 있으면 사용자에게 알림
+      if (failedApis.length > 0) {
+        if (failedApis.length <= 3) {
+          toast.warning(`일부 데이터 로드 실패: ${failedApis.join(', ')}`);
+        } else {
+          toast.warning(`${failedApis.length}개 데이터 로드 실패: ${failedApis.slice(0, 3).join(', ')} 외`);
+        }
+      }
 
       console.log('📦 receiptsData:', receiptsData?.length || 0, '건');
       console.log('📦 budgetsData:', budgetsData?.length || 0, '건');
@@ -513,26 +502,58 @@ const ReceiptFinancePlatform = () => {
         setBudgets(budgetObj);
       }
 
-      if (challengesData?.length > 0) setChallenges(challengesData);
-      if (completedChallengesData?.length > 0) setCompletedChallenges(completedChallengesData);
+      // challenges 관련 데이터는 useChallengesData 훅에서 탭 선택 시 로드
       if (dailyMissionsData?.length > 0) setDailyMissions(dailyMissionsData);
-      if (weeklyMissionsData?.length > 0) setWeeklyMissions(weeklyMissionsData);
-      if (leaderboardData?.length > 0) setLeaderboard(leaderboardData);
-      if (rewardsData?.length > 0) setRewards(rewardsData);
       if (eventsData?.length > 0) setEvents(eventsData);
       if (communityPostsData?.length > 0) setCommunityPosts(communityPostsData);
       if (taxExpertsData?.length > 0) setTaxExperts(taxExpertsData);
       if (financialProductsData?.length > 0) setFinancialProducts(financialProductsData);
-      if (monthlySpendingTrendResult?.length > 0) setMonthlySpendingTrendData(monthlySpendingTrendResult);
+      // monthlySpendingTrend는 receipts/budgets에서 useMemo로 계산
 
-      // AI 인사이트에 아이콘 추가
-      if (aiInsightsData?.length > 0) {
-        const iconMap = { medical: Pill, education: GraduationCap, card: CreditCard, housing: Home };
-        const insightsWithIcons = aiInsightsData.map(insight => ({
+      // AI 인사이트: DB 인사이트 + 규칙 기반 인사이트 병합
+      {
+        const iconMap = { medical: Pill, education: GraduationCap, card: CreditCard, housing: Home, pension: Wallet, donation: Heart, budget: PieChart, deadline: AlertCircle };
+
+        // 1. DB에서 가져온 인사이트에 아이콘 추가
+        const dbInsights = (aiInsightsData || []).map(insight => ({
           ...insight,
           icon: iconMap[insight.category] || AlertCircle,
+          source: 'db',
         }));
-        setAiInsights(insightsWithIcons);
+
+        // 2. 규칙 기반 인사이트 생성 (deductionTracker 변환 후 사용)
+        let deductionObj = {};
+        if (deductionTrackerData?.length > 0) {
+          deductionTrackerData.forEach(d => {
+            deductionObj[d.category] = {
+              current: d.current_amount,
+              maxDeduction: d.max_deduction,
+            };
+          });
+        }
+
+        // 연소득 추정 (개인 세금 데이터에서 가져오거나 기본값)
+        const annualIncome = individualTaxDataResult?.[0]?.income || 40000000;
+
+        // 규칙 기반 인사이트 생성
+        const ruleBasedInsights = generateAllInsights(
+          deductionObj,
+          receiptsData || [],
+          budgetsData || {},
+          annualIncome,
+          userType
+        ).map(insight => ({
+          ...insight,
+          icon: iconMap[insight.category] || AlertCircle,
+          source: 'rule',
+        }));
+
+        // 3. 중복 제거 후 병합 (같은 카테고리의 DB 인사이트가 있으면 규칙 기반 제외)
+        const dbCategories = new Set(dbInsights.map(i => i.category));
+        const filteredRuleInsights = ruleBasedInsights.filter(i => !dbCategories.has(i.category));
+
+        const combinedInsights = [...dbInsights, ...filteredRuleInsights];
+        setAiInsights(combinedInsights);
       }
 
       if (notificationCenterData?.length > 0) setNotificationCenter(notificationCenterData);
@@ -590,20 +611,32 @@ const ReceiptFinancePlatform = () => {
       }
 
       console.log('API 데이터 로드 완료');
+      isDataLoadedRef.current = true; // 로드 완료 표시
     } catch (error) {
       console.error('API 데이터 로드 실패:', error);
       setApiError('데이터를 불러오는 중 오류가 발생했습니다.');
+      toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
+      isDataLoadedRef.current = true; // 에러여도 재시도 방지 (수동 새로고침 필요)
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, toast]);
 
   // 사용자 로그인 시 API 데이터 로드
   useEffect(() => {
     if (currentUser?.id) {
       loadDataFromAPI(currentUser.id);
     }
-  }, [currentUser, loadDataFromAPI]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]); // loadDataFromAPI는 ref로 중복 방지하므로 의존성에서 제외
+
+  // Challenges 탭 선택 시 지연 로드
+  useEffect(() => {
+    if (currentTab === 'challenges' && currentUser?.id) {
+      challengesData.loadData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTab, currentUser?.id]); // loadData는 useChallengesData 내부 ref로 중복 방지
 
   // Supabase Realtime 구독 - 양방향 데이터 동기화
   useEffect(() => {
@@ -2734,14 +2767,8 @@ const ReceiptFinancePlatform = () => {
   );
 
   // Budget View
-  // 월별 지출 데이터 계산 - DB 데이터 우선 사용
+  // 월별 지출 데이터 계산 - 로컬 receipts/budgets에서 산출
   const monthlySpendingData = useMemo(() => {
-    // DB에서 로드된 데이터가 있으면 사용
-    if (monthlySpendingTrendData?.length > 0) {
-      return monthlySpendingTrendData;
-    }
-
-    // 폴백: 로컬 데이터로 계산
     const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
     const currentMonth = new Date().getMonth();
 
@@ -2753,7 +2780,7 @@ const ReceiptFinancePlatform = () => {
       const total = monthReceipts.reduce((sum, r) => sum + r.amount, 0);
       return { month, 지출: total, 예산: Object.values(budgets).reduce((a, b) => a + b, 0) };
     });
-  }, [monthlySpendingTrendData, receipts, budgets]);
+  }, [receipts, budgets]);
 
   // 예산 vs 실제 비교 데이터
   const budgetComparisonData = useMemo(() => {
@@ -3688,6 +3715,42 @@ const ReceiptFinancePlatform = () => {
 
   const unlockedBadges = allBadges.filter(b => b.unlocked);
   const lockedBadges = allBadges.filter(b => !b.unlocked);
+
+  // Challenges 탭용 통계 (훅 데이터 기반)
+  const challengeStatsFromHook = useMemo(() => {
+    const activeChallenges = challengesData.challenges.filter(c => c.status === 'active');
+    const totalProgress = activeChallenges.reduce((sum, c) => sum + (c.progress / c.target) * 100, 0);
+    const avgProgress = activeChallenges.length > 0 ? totalProgress / activeChallenges.length : 0;
+
+    return {
+      active: activeChallenges.length,
+      completed: challengesData.completedChallenges.length,
+      avgProgress: Math.round(avgProgress),
+      totalRewardsEarned: challengesData.completedChallenges.reduce((sum, c) => sum + (c.reward || 0), 0),
+      pieData: [
+        { name: '완료', value: challengesData.completedChallenges.length, fill: '#10b981' },
+        { name: '진행중', value: activeChallenges.length, fill: '#3b82f6' },
+      ],
+    };
+  }, [challengesData.challenges, challengesData.completedChallenges]);
+
+  const allBadgesFromHook = useMemo(() => [
+    { id: 'first_receipt', name: '첫 영수증', icon: '📝', description: '첫 영수증 등록', category: '시작', unlocked: userProfile.badges.includes('first_receipt') },
+    { id: 'streak_7', name: '7일 연속 출석', icon: '🔥', description: '7일 연속 출석 달성', category: '출석', unlocked: userProfile.streak >= 7 },
+    { id: 'streak_30', name: '30일 연속 출석', icon: '⚡', description: '30일 연속 출석 달성', category: '출석', unlocked: userProfile.streak >= 30 },
+    { id: 'saver_bronze', name: '절약 브론즈', icon: '🥉', description: '10만원 절약 달성', category: '절약', unlocked: userProfile.totalSaved >= 100000 },
+    { id: 'saver_silver', name: '절약 실버', icon: '🥈', description: '50만원 절약 달성', category: '절약', unlocked: userProfile.totalSaved >= 500000 },
+    { id: 'saver_gold', name: '절약 골드', icon: '🥇', description: '100만원 절약 달성', category: '절약', unlocked: userProfile.totalSaved >= 1000000 },
+    { id: 'challenge_master', name: '챌린지 마스터', icon: '🏆', description: '10개 챌린지 완료', category: '챌린지', unlocked: challengesData.completedChallenges.length >= 10 },
+    { id: 'tax_expert', name: '절세 전문가', icon: '📊', description: '세금 건강 점수 90 달성', category: '세금', unlocked: taxHealthScore >= 90 },
+    { id: 'deduction_hunter', name: '공제 헌터', icon: '🎯', description: '5개 공제 항목 최대 활용', category: '공제', unlocked: false },
+    { id: 'early_bird', name: '얼리버드', icon: '🐦', description: '세금 신고 1달 전 준비 완료', category: '특별', unlocked: false },
+    { id: 'community_star', name: '커뮤니티 스타', icon: '⭐', description: '질문에 10회 답변', category: '커뮤니티', unlocked: false },
+    { id: 'premium_member', name: '프리미엄 멤버', icon: '👑', description: '프리미엄 구독', category: '특별', unlocked: isPremium },
+  ], [userProfile, challengesData.completedChallenges, taxHealthScore, isPremium]);
+
+  const unlockedBadgesFromHook = allBadgesFromHook.filter(b => b.unlocked);
+  const lockedBadgesFromHook = allBadgesFromHook.filter(b => !b.unlocked);
 
   // Benefits (혜택 탐색) 데이터
   const [benefitsCategory, setBenefitsCategory] = useState('all');
@@ -4629,20 +4692,43 @@ const ReceiptFinancePlatform = () => {
           />
         )}
         {currentTab === 'challenges' && (
-          <ChallengesView
-            activeTheme={activeTheme}
-            userProfile={userProfile}
-            challengeStats={challengeStats}
-            allBadges={allBadges}
-            unlockedBadges={unlockedBadges}
-            lockedBadges={lockedBadges}
-            leaderboard={leaderboard}
-            weeklyMissions={weeklyMissions}
-            challenges={challenges}
-            completedChallenges={completedChallenges}
-            rewards={rewards}
-            handleRewardExchange={handleRewardExchange}
-          />
+          challengesData.isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p className="text-gray-500">챌린지 데이터 로딩 중...</p>
+              </div>
+            </div>
+          ) : challengesData.error && challengesData.challenges.length === 0 ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                <p className="text-gray-700 font-medium mb-2">데이터를 불러올 수 없습니다</p>
+                <p className="text-gray-500 text-sm mb-4">{challengesData.error}</p>
+                <button
+                  onClick={() => challengesData.reload()}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                >
+                  다시 시도
+                </button>
+              </div>
+            </div>
+          ) : (
+            <ChallengesView
+              activeTheme={activeTheme}
+              userProfile={userProfile}
+              challengeStats={challengeStatsFromHook}
+              allBadges={allBadgesFromHook}
+              unlockedBadges={unlockedBadgesFromHook}
+              lockedBadges={lockedBadgesFromHook}
+              leaderboard={challengesData.leaderboard}
+              weeklyMissions={challengesData.weeklyMissions}
+              challenges={challengesData.challenges}
+              completedChallenges={challengesData.completedChallenges}
+              rewards={challengesData.rewards}
+              handleRewardExchange={handleRewardExchange}
+            />
+          )
         )}
       </main>
 
