@@ -4401,7 +4401,7 @@ const ReceiptFinancePlatform = () => {
               onClick={() => setAuthMode('login')}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition ${authMode === 'login' ? 'bg-white shadow' : 'text-gray-600'
                 }`}
-              style={authMode === 'login' ? { color: activeTheme.primary } : {}}
+              style={authMode === 'login' ? { color: BRAND_COLOR } : {}}
             >
               로그인
             </button>
@@ -4409,7 +4409,7 @@ const ReceiptFinancePlatform = () => {
               onClick={() => setAuthMode('signup')}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition ${authMode === 'signup' ? 'bg-white shadow' : 'text-gray-600'
                 }`}
-              style={authMode === 'signup' ? { color: activeTheme.primary } : {}}
+              style={authMode === 'signup' ? { color: BRAND_COLOR } : {}}
             >
               회원가입
             </button>
