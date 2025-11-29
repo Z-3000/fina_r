@@ -2,6 +2,23 @@
 
 한국형 스마트 세금/재무 관리 플랫폼 (영수증 OCR, 예산 추적, 세금 계산, 게이미피케이션)
 
+## Project Status
+
+| 항목 | 상태 |
+|------|------|
+| Phase | MVP 개발 완료, 리팩토링 진행 중 |
+| Deploy | Production (Vercel) |
+| Focus | 코드 모듈화, API 분리, 성능 최적화 |
+
+### Current Refactoring
+- `App.jsx` → View 컴포넌트 분리 (진행 중)
+- `supabaseApi.js` → `services/api/` 모듈화 (진행 중)
+- `taxCalculator.js` → `services/calculators/` 분리 (진행 중)
+
+### Known Issues
+- App.jsx 파일 크기 과대 (~300KB)
+- 일부 하드코딩된 세금 상수 → DB 마이그레이션 필요
+
 ## Tech Stack
 
 | Category | Stack |
