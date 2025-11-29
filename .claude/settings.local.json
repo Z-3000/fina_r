@@ -41,9 +41,14 @@
       "Bash(wc:*)",
       "Bash(mkdir:*)",
       "Bash(npx eslint:*)",
-      "Bash(node --check:*)"
+      "Bash(node --check:*)",
+      "Bash(git config:*)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }

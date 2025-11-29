@@ -10,6 +10,7 @@ import {
 import {
   BRAND_COLOR, PRIMARY_BLUE, SUCCESS_GREEN, ACCENT_GOLD, ACCENT_COLOR
 } from '../../constants/colors';
+import { CHART_COLORS } from '../../constants/charts';
 // 소상공인 세금 계산 함수
 import {
   calculateYellowUmbrellaDeduction,
@@ -17,15 +18,7 @@ import {
   calculateSimplifiedVAT,
   calculateGeneralVAT,
   getIndustryList,
-} from '../../services/taxCalculator';
-
-// 차트 색상 상수
-const CHART_COLORS = {
-  green: '#10B981',
-  greenLight: '#34D399',
-  red: '#EF4444',
-  redLight: '#F87171',
-};
+} from '../../services/calculators';
 
 const TaxPredictionView = ({
   // 상태

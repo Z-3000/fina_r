@@ -5,7 +5,7 @@ import {
   missionsAPI,
   leaderboardAPI,
   rewardsProductAPI,
-} from '../services/supabaseApi';
+} from '../services/api';
 import { useToast } from '../context/ToastContext';
 
 /**

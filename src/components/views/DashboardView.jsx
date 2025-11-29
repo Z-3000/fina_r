@@ -13,36 +13,8 @@ import {
   BRAND_COLOR, PRIMARY_BLUE, SUCCESS_GREEN, ACCENT_GOLD,
   PRIMARY_DARK
 } from '../../constants/colors';
-
-// 차트 색상 상수
-const CHART_COLORS = {
-  green: '#10B981',
-  greenLight: '#34D399',
-  red: '#EF4444',
-  redLight: '#F87171',
-  danger: '#DC2626',
-};
-
-// 금액 포맷팅
-const formatAmount = (amount) => {
-  if (amount === null || amount === undefined) return '0';
-  return Math.round(amount).toLocaleString();
-};
-
-// 고유 색상 팔레트 (중복 없음)
-const UNIQUE_CHART_COLORS = [
-  '#6366F1', // Indigo
-  '#10B981', // Emerald
-  '#F59E0B', // Amber
-  '#EF4444', // Red
-  '#8B5CF6', // Violet
-  '#06B6D4', // Cyan
-  '#EC4899', // Pink
-  '#84CC16', // Lime
-  '#F97316', // Orange
-  '#14B8A6', // Teal
-  '#9CA3AF', // Gray (기타용)
-];
+import { CHART_COLORS, UNIQUE_CHART_COLORS } from '../../constants/charts';
+import { formatAmount } from '../../utils/formatting';
 
 const DashboardView = ({
   // 상태

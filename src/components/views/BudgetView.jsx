@@ -5,14 +5,7 @@ import {
   CartesianGrid, XAxis, YAxis, Tooltip, Legend
 } from 'recharts';
 import { BRAND_COLOR } from '../../constants/colors';
-
-// 차트 색상 상수
-const CHART_COLORS = {
-  green: '#10B981',
-  greenLight: '#34D399',
-  red: '#EF4444',
-  redLight: '#F87171',
-};
+import { CHART_COLORS } from '../../constants/charts';
 
 const BudgetView = ({
   // 상태

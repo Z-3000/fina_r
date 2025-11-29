@@ -17,7 +17,7 @@ import {
   INDUSTRY_VALUE_ADDED_RATES,
   SIMPLIFIED_TAX_CRITERIA,
   CARD_SALES_TAX_CREDIT,
-} from '../constants/businessTaxConstants';
+} from '../../constants/businessTaxConstants';
 
 // =============================================
 // 2025년 기준 소득세율표 (과세표준) - 변동 없음

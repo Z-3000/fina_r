@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, onAuthStateChange } from '../lib/supabase';
-import { authAPI } from '../services/supabaseApi';
+import { authAPI } from '../services/api';
 import { useToast } from '../context/ToastContext';
 
 /**
