@@ -4,7 +4,7 @@
 
 ---
 
-## 📊 현재 상태 요약 (2025-11-28)
+## 📊 현재 상태 요약 (2025-11-30 최종)
 
 | 항목 | Before | After | 변화 |
 |------|--------|-------|------|
@@ -12,19 +12,253 @@
 | supabaseApi.js | 1,254줄 (단일) | 12개 모듈 | 분리 완료 |
 | taxCalculator.js | services/ | calculators/ | 이동 완료 |
 | 모달 컴포넌트 | App.jsx 내장 | 12개 분리 | 분리 완료 |
+| **CLAUDE.md** | **장황한 형식** | **간결한 Bullet 스타일** | **최적화 완료** |
+| **useModals 훅** | **없음** | **생성 완료** | **적용 대기** |
+| **ARCHITECTURE.md** | **없음** | **생성 완료** | **Mermaid 차트** |
 
 ### ✅ 완료된 Phase
 - **Phase 1**: 유틸리티/상수/모달 8개 분리
 - **Phase 2**: 추가 모달 4개 분리 (ReceiptModal, AccountLinkModal, DetailsModal, TaxSimulatorModal)
 - **Phase 3**: API 모듈 분리 (`src/services/api/`)
 - **Phase 4**: taxCalculator 폴더 이동 (`src/services/calculators/`)
+- **즉시 처리**: DetailsModal/QuestionModal 핸들러 연결 ✅
+- **즉시 처리**: 백업 파일 제거 (`supabaseApi.js.bak`) ✅
+- **준비 완료**: useModals 훅 생성 (`src/hooks/useModals.js`) ✅
+- **문서화**: ARCHITECTURE.md 생성 (Mermaid 차트) ✅
 
 ### ⏳ 다음 작업 (우선순위순)
-1. **DetailsModal/QuestionModal 핸들러 연결** - 코드-문서 불일치 해소
-2. **백업 파일 제거** - `supabaseApi.js.bak`
-3. **Phase 5**: taxCalculator 세부 모듈화
-4. **Phase 6**: Custom Hooks 추출
-5. **Phase 7**: 잔여 View 컴포넌트화
+1. **App.jsx에 useModals 적용** - 모달 상태 15개 → 훅 1개 (준비 완료, 적용 대기)
+2. **Phase 5**: taxCalculator 세부 모듈화 (사용자 검토 후 진행)
+3. **Phase 6**: Custom Hooks 추출 (영수증/예산 - 의존성 복잡)
+4. **Phase 7**: 잔여 View 컴포넌트화
+
+---
+
+## 🔄 연속성 가이드 (다음 세션용)
+
+> 이 섹션은 다음 개발 세션에서 빠르게 컨텍스트를 파악할 수 있도록 작성됨
+
+### 현재 진행 상황
+
+| 작업 | 상태 | 파일 | 비고 |
+|------|------|------|------|
+| useModals 훅 | ✅ 생성 완료 | `src/hooks/useModals.js` | **App.jsx 적용 대기** |
+| ARCHITECTURE.md | ✅ 생성 완료 | `docs/ARCHITECTURE.md` | Mermaid 차트 포함 |
+| DetailsModal 연결 | ✅ 완료 | `BenefitsView.jsx`, `App.jsx` | - |
+| QuestionModal 연결 | ✅ 완료 | `App.jsx` 헤더 | MessageCircle 아이콘 |
+| 백업 파일 제거 | ✅ 완료 | `supabaseApi.js.bak` 삭제됨 | - |
+
+### ⚠️ 중요: useModals 적용 시 주의사항
+
+`useModals` 훅은 생성되었지만 **아직 App.jsx에 적용되지 않음**.
+
+**적용 시 단계:**
+1. App.jsx 상단에 훅 import
+2. 15개 useState → useModals() 호출로 교체
+3. 기존 변수명 그대로 사용 가능 (호환 별칭 제공됨)
+
+**적용 보류 이유:**
+- 사용자가 안전성 우선 요청
+- 영수증 핸들러 등 복잡한 의존성 확인 필요
+- 점진적 적용 권장
+
+### ⚠️ 영수증/예산 훅 분리 시 의존성
+
+```
+handleAddReceipt() 내부 상태 업데이트:
+├── receipts (영수증 목록)
+├── dailyMissions (미션 진행도)
+├── challenges (챌린지 상태)
+├── userProfile (포인트/경험치)
+└── showReceiptModal (모달)
+
+→ 단순 분리 불가, Context 또는 신중한 설계 필요
+```
+
+### 다음 세션 권장 작업
+
+1. **안전한 선택**: useModals만 App.jsx에 적용 (독립적, 위험 없음)
+2. **신중한 선택**: taxCalculator 로직 검토 후 모듈화 계획 구체화
+3. **도전적 선택**: 영수증/예산 훅 분리 (의존성 분석 선행 필요)
+
+### 참고 문서
+
+- `docs/ARCHITECTURE.md` - 전체 코드 구조 Mermaid 차트
+- `docs/FINA_R_개발로드맵.md` - 프로젝트 로드맵
+- `CLAUDE.md` - 프로젝트 지침 (최적화됨)
+
+---
+
+## 2025-11-30 (훅 추출 준비)
+
+### 목표
+- 공용 유틸/훅 분리 준비
+- App.jsx 점진적 리팩토링 기반 마련
+
+### 수행 내역
+
+#### 1. useModals 훅 생성
+**파일**: `src/hooks/useModals.js` (신규)
+
+15개 모달 상태를 통합 관리하는 훅:
+```javascript
+const {
+  modals,              // { receipt: false, premium: false, ... }
+  openModal,           // (name, data?) => void
+  closeModal,          // (name) => void
+
+  // 기존 호환 별칭
+  showReceiptModal,    // boolean
+  setShowReceiptModal, // (v) => void
+  ...
+} = useModals();
+```
+
+**통합된 상태 (15개):**
+- receipt, premium, details, reward, accountLink
+- value, auth, docSpace, pdfReport, taxSimulator
+- aiInsight, settings, question, transactionDetail, budgetLimit
+
+#### 2. 아키텍처 문서 생성
+**파일**: `docs/ARCHITECTURE.md` (신규)
+
+Mermaid 차트 포함:
+- 전체 폴더 구조
+- App.jsx 의존성 맵
+- 데이터 흐름
+- 세금 계산 흐름
+- API 모듈 구조
+- 리팩토링 로드맵
+
+#### 3. 의존성 분석 결과
+
+**영수증/예산 훅 분리 시 복잡한 의존성:**
+```
+handleAddReceipt() 내부에서 업데이트하는 상태:
+├── receipts (영수증)
+├── dailyMissions (미션)
+├── challenges (챌린지)
+├── userProfile (포인트/경험치)
+└── showReceiptModal (모달)
+```
+
+→ 즉시 분리 시 위험, 점진적 분리 필요
+
+### 생성된 파일
+
+| 파일 | 줄 수 | 용도 |
+|------|-------|------|
+| `src/hooks/useModals.js` | ~200줄 | 모달 상태 통합 관리 |
+| `docs/ARCHITECTURE.md` | ~300줄 | 코드 구조 시각화 |
+
+### 다음 단계
+
+1. **App.jsx에 useModals 적용** - 모달 상태 15개 → 훅 1개
+2. **의존성 정리** - 영수증/예산 핸들러 내 상태 업데이트 분리
+3. **점진적 훅 추출** - 정리 후 useReceiptManagement 등 추출
+
+---
+
+## 2025-11-30 (즉시 처리 리팩토링)
+
+### 목표
+- 코드-문서 불일치 해소 (DetailsModal/QuestionModal 핸들러 연결)
+- 불필요한 백업 파일 정리
+
+### 수행 내역
+
+#### 1. 백업 파일 제거
+```bash
+# 삭제된 파일
+src/services/supabaseApi.js.bak
+```
+- git 추적 상태 확인 후 삭제
+- 향후 import 혼란 방지
+
+#### 2. DetailsModal 버튼 연결
+
+**수정된 파일:**
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `src/App.jsx` | BenefitsView에 `onOpenDetailsModal`, `onOpenQuestionModal` props 전달 |
+| `src/components/views/BenefitsView.jsx` | props 수신 및 버튼 onClick 연결 |
+
+**BenefitsView 도움말 카드 버튼 연결:**
+- 전문가 상담 → `onOpenDetailsModal('experts')`
+- 금융상품 추천 → `onOpenDetailsModal('products')`
+- 커뮤니티 → `onOpenDetailsModal('community')`
+- 질문하기 → `onOpenQuestionModal()`
+
+#### 3. QuestionModal 독립 접근 경로 추가
+
+**수정된 파일:** `src/App.jsx`
+
+**헤더에 질문하기 버튼 추가:**
+```jsx
+{/* 질문하기 버튼 */}
+<button
+  onClick={() => setShowQuestionModal(true)}
+  className="p-2 hover:bg-gray-100 rounded-lg transition"
+  title="질문하기"
+>
+  <MessageCircle className="w-5 h-5" />
+</button>
+```
+
+**접근 경로:**
+- 헤더: MessageCircle 아이콘 버튼 (항상 표시)
+- BenefitsView: "질문하기" 버튼
+- DetailsModal (community 타입): "질문하기" 버튼
+
+### 결과
+- 빌드 검증 완료 (`npm run build` 성공)
+- DetailsModal 3가지 타입 모두 접근 가능
+- QuestionModal 헤더에서 직접 접근 가능
+
+---
+
+## 2025-11-30 (CLAUDE.md 최적화)
+
+### 목표
+- Claude Code 지침 파일(CLAUDE.md) 최적화
+- 토큰 효율성 개선 및 최신 프로젝트 상태 반영
+
+### 수행 내역
+
+#### 1. CLAUDE.md 전체 재구성
+
+**개선 원칙 (베스트 프랙티스 적용)**
+
+| 구분 | Before | After |
+|------|--------|-------|
+| 형식 | 장황한 테이블/서술 | 간결한 Bullet/코드블록 |
+| 프로젝트 상태 | 구버전 정보 | v3.8, Phase 3 (50%) |
+| 파일 구조 | 일부 누락 | 전체 구조 반영 (API 12개, 모달 12개, OCR 시스템) |
+| 개발 가이드 | 없음 | 에러 핸들링, 지연 로드 패턴 추가 |
+
+#### 2. 추가된 섹션
+
+| 섹션 | 내용 |
+|------|------|
+| Current Focus | 리팩토링 진행률 (App.jsx -24%) |
+| Known Issues | DetailsModal 핸들러 미연결, 백업 파일 정리 |
+| Development Guidelines | 에러 핸들링 패턴, 지연 로드 패턴 |
+| Reference Docs | docs 폴더 문서 링크 |
+
+#### 3. 토큰 효율성 개선
+
+| 항목 | Before | After |
+|------|--------|-------|
+| Tech Stack | 테이블 형식 | 코드블록 한 줄씩 |
+| Project Structure | 설명 포함 | 순수 트리 구조 |
+| API Modules | 개별 테이블 | 한 줄 나열 |
+
+### 결과
+
+- CLAUDE.md 약 240줄 (최적화된 구조)
+- 프로젝트 현재 상태 정확히 반영
+- 향후 개발자/AI가 프로젝트 이해에 필요한 핵심 정보만 포함
 
 ---
 

@@ -4529,6 +4529,15 @@ const ReceiptFinancePlatform = () => {
                 )}
               </button>
 
+              {/* 질문하기 버튼 */}
+              <button
+                onClick={() => setShowQuestionModal(true)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition"
+                title="질문하기"
+              >
+                <MessageCircle className="w-5 h-5" />
+              </button>
+
               {/* OCR 스캔 버튼 */}
               <label
                 className="px-4 py-2 rounded-lg cursor-pointer transition flex items-center gap-2 font-semibold"
@@ -4698,6 +4707,11 @@ const ReceiptFinancePlatform = () => {
             filteredBenefits={filteredBenefits}
             eligibleBenefitsCount={eligibleBenefitsCount}
             setBenefitsCategory={setBenefitsCategory}
+            onOpenDetailsModal={(type) => {
+              setDetailsModalType(type);
+              setShowDetailsModal(true);
+            }}
+            onOpenQuestionModal={() => setShowQuestionModal(true)}
           />
         )}
         {currentTab === 'challenges' && (

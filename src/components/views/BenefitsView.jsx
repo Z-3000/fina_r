@@ -12,6 +12,8 @@ const BenefitsView = ({
   eligibleBenefitsCount,
   // 함수
   setBenefitsCategory,
+  onOpenDetailsModal,
+  onOpenQuestionModal,
 }) => {
   return (
     <div className="space-y-6">
@@ -121,13 +123,31 @@ const BenefitsView = ({
         </p>
         <div className="flex gap-3">
           <button
+            onClick={() => onOpenDetailsModal?.('experts')}
             className="flex-1 py-2 rounded-lg font-semibold hover:opacity-90 transition"
             style={{ backgroundColor: activeTheme.primary, color: activeTheme.text }}
           >
             전문가 상담
           </button>
-          <button className="flex-1 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition">
-            신청 가이드
+          <button
+            onClick={() => onOpenDetailsModal?.('products')}
+            className="flex-1 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition"
+          >
+            금융상품 추천
+          </button>
+        </div>
+        <div className="flex gap-3 mt-3">
+          <button
+            onClick={() => onOpenDetailsModal?.('community')}
+            className="flex-1 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition"
+          >
+            커뮤니티
+          </button>
+          <button
+            onClick={() => onOpenQuestionModal?.()}
+            className="flex-1 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition"
+          >
+            질문하기
           </button>
         </div>
       </div>
