@@ -28,3 +28,4 @@ dist-ssr
 
 # MCP Server config (contains API tokens)
 .mcp.json
+.aider*

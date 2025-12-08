@@ -42,7 +42,9 @@
       "Bash(mkdir:*)",
       "Bash(npx eslint:*)",
       "Bash(node --check:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(dir git)",
+      "Bash(dir C:gitfina_rdocs*세금*)"
     ],
     "deny": [],
     "ask": []
